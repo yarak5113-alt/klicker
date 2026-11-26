@@ -78,7 +78,7 @@
   .total-label { color: var(--muted); font-weight: 500; margin: 6px 0 22px; }
 
   .last-click {
-    display: inline-flex; align-items: center; gap: 10px; max-width: 100%;
+    display: flex; width: fit-content; align-items: center; gap: 10px; max-width: 100%;
     margin: 0 auto 26px; padding: 6px 16px 6px 6px; border-radius: 999px;
     background: rgba(0,0,0,.25); border: 1px solid var(--border); font-size: 14px; color: var(--muted);
   }
@@ -93,7 +93,7 @@
   .lc-text b { color: var(--text); font-weight: 700; }
   .lc-when::before { content: ' · '; }
 
-  .stage { position: relative; display: inline-block; }
+  .stage { position: relative; display: block; width: fit-content; margin: 0 auto; }
   .ring {
     --p: 1;
     width: 248px; height: 248px; border-radius: 50%; padding: 10px; margin: 0 auto;
@@ -171,6 +171,17 @@
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
   .chip.ok { color: var(--ok); background: rgba(52,211,153,.12); }
   .chip.bad { color: var(--bad); background: rgba(251,113,133,.12); }
+  .chip.off { color: var(--muted); background: rgba(255,255,255,.06); }
+  td.status { white-space: nowrap; }
+  tr.removed td.time, tr.removed td.who { text-decoration: line-through; opacity: .5; }
+  button.undo {
+    margin-left: 8px; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; vertical-align: middle;
+    border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 14px;
+    opacity: .45; transition: opacity .15s, color .15s, border-color .15s;
+  }
+  tr:hover button.undo, button.undo:focus-visible { opacity: 1; }
+  button.undo:hover { color: var(--bad); border-color: rgba(251,113,133,.5); }
+  @media (hover: none) { button.undo { opacity: .8; } }
 
   .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 14px; }
   ol.records li.empty { display: block; background: transparent; }
@@ -178,10 +189,16 @@
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; opacity: .7; }
 
   /* ---------- Spracherkennung ---------- */
-  .card.voice { margin-top: 16px; }
-  .voice-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .voice h2 { margin-bottom: 6px; }
-  .voice-status { font-size: 14px; color: var(--muted); }
+  .card.voice { margin-top: 16px; text-align: center; }
+  .voice h2 { margin-bottom: 14px; }
+  .voice-status { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .voice-meter { width: min(100%, 320px); height: 6px; margin: 12px auto 0; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .voice-meter > i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--ok), var(--gold), var(--bad)); transition: width .08s; }
+  .voice-mode { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .voice-mode select {
+    background: rgba(0,0,0,.3); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 10px; font: 500 13px Inter, system-ui, sans-serif; max-width: 70vw;
+  }
   .voice-status.listening { color: var(--ok); }
   .voice-status.listening::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-right: 8px; animation: ping 1.2s infinite; vertical-align: middle; }
   .voice-status.error { color: var(--bad); }
@@ -266,13 +283,17 @@
   </section>
 
   <section class="card voice">
-    <div class="voice-row">
-      <div>
-        <h2>🎤 Automatisch zählen</h2>
-        <div class="voice-status off" id="voice-status"></div>
-      </div>
-      <button class="voice-btn" id="voice-btn">🎤 Spracherkennung an</button>
-    </div>
+    <h2>🎤 Automatisch zählen</h2>
+    <button class="voice-btn" id="voice-btn">🎤 Spracherkennung an</button>
+    <div class="voice-status off" id="voice-status"></div>
+    <div class="voice-meter" title="Mikrofon-Pegel"><i id="voice-meter-bar"></i></div>
+    <label class="voice-mode">Erkennung:
+      <select id="voice-mode">
+        <option value="streng">Streng – nur exakt „an der Stelle“</option>
+        <option value="normal">Normal – kleine Hörfehler erlaubt</option>
+        <option value="locker">Locker – für große Entfernung</option>
+      </select>
+    </label>
     <div class="voice-heard" id="voice-heard"></div>
   </section>
 
@@ -403,7 +424,7 @@ let blockCounts = new Map();
 function computeBlocks(rows) {
   blockCounts = new Map();
   for (const r of rows) {
-    if (!r.accepted || typeof r.ts !== 'number') continue;
+    if (!r.accepted || r.removed || typeof r.ts !== 'number') continue;
     const b = blockAt(r.ts);
     if (!b) continue;
     const e = blockCounts.get(b.key) || { ...b, count: 0 };
@@ -475,14 +496,26 @@ onValue(query(ref(db, 'logs'), orderByKey()), snap => {
     const t = el('td', 'time');
     if (typeof l.ts === 'number') t.append(el('span', 'date', fmtDate(l.ts) + ' · '), fmtClock(l.ts));
     else t.textContent = '…';
-    const st = el('td');
-    st.append(el('span', 'chip ' + (l.accepted ? 'ok' : 'bad'), l.accepted ? '✓ gezählt' : '✕ abgelehnt'));
+    const st = el('td', 'status');
+    if (l.removed) {
+      tr.classList.add('removed');
+      st.append(el('span', 'chip off', '↩ entfernt'));
+    } else {
+      st.append(el('span', 'chip ' + (l.accepted ? 'ok' : 'bad'), l.accepted ? '✓ gezählt' : '✕ abgelehnt'));
+      if (l.accepted) {
+        const u = el('button', 'undo', '↩');
+        u.title = 'Diesen Klick entfernen';
+        u.addEventListener('click', () => undoClick(l));
+        st.append(u);
+      }
+    }
     tr.append(t, el('td', 'who', l.name), st);   // textContent = kein XSS
     tb.append(tr);
   }
   seenLogs = new Set(rows.map(r => r.key));
 
-  const lastOk = rows.find(r => r.accepted);
+  const lastOk = rows.find(r => r.accepted && !r.removed);
+  if (!lastOk) { $('last-click').hidden = true; lastClickTs = null; }
   if (lastOk) {
     const box = $('last-click');
     if (lastClickKey && lastClickKey !== lastOk.key) {
@@ -621,19 +654,111 @@ async function doClick(source) {
 }
 btn.addEventListener('click', () => doClick('button'));
 
+// ---------- Rückgängig ----------
+async function undoClick(l) {
+  if (typeof l.ts !== 'number') return;
+  if (!confirm(`Klick von „${l.name}“ um ${fmtClock(l.ts)} Uhr entfernen?\nDer Zähler geht dann um 1 runter.`)) return;
+  try {
+    // Zähler −1 und Log-Eintrag als "entfernt" markieren – in EINEM Schreibvorgang.
+    await update(ref(db), {
+      state: { total: total - 1, last: lastMs, lastUndo: l.key },
+      ['logs/' + l.key]: { ts: l.ts, name: l.name, accepted: true, removed: true, removedAt: serverTimestamp() },
+    });
+    showMsg('ok', `↩ Klick von ${l.name} entfernt.`);
+  } catch (e) {
+    console.error(e);
+    showMsg('bad', isDenied(e)
+      ? 'Entfernen nicht möglich (gerade wurde geklickt oder die Regeln sind noch alt). Nochmal versuchen.'
+      : 'Verbindung fehlgeschlagen.');
+  }
+}
+
 // ---------- Spracherkennung „an der Stelle“ ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const PHRASE = /an\s+der\s+stelle/gi;
 // Zeitfenster, in dem ein erkannter Satz als "derselbe" gilt wie der zuletzt gezählte Klick.
 const VOICE_WINDOW_MS = (cfg.VOICE_DEDUPE_SECONDS ?? 8) * 1000;
 const voiceBtn = $('voice-btn'), voiceStatus = $('voice-status'), voiceHeard = $('voice-heard');
+const modeSel = $('voice-mode'), meterBar = $('voice-meter-bar');
 let rec = null, voiceOn = false, counted = [];
+
+// Erkennung: Groß/klein, Satzzeichen und typische Hörfehler bei leiser/entfernter Stimme
+// werden toleriert ("ander Stelle", "an de Stelle", "an den Stellen", "and der Stelle" …).
+// Es werden ALLE Alternativen geprüft, die der Browser liefert, nicht nur die beste.
+const TARGET = 'an der stelle';
+const MODES = {
+  streng: { max: 0, stelle: 0 },  // nur exakt "an der Stelle"
+  normal: { max: 1, stelle: 1 },  // kleine Hörfehler
+  locker: { max: 3, stelle: 2 },  // für große Entfernung, zählt evtl. auch ähnliche Sätze
+};
+modeSel.value = localStorage.getItem('klicker-voice-mode') || 'normal';
+modeSel.addEventListener('change', () => localStorage.setItem('klicker-voice-mode', modeSel.value));
+
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-zß]+/g, ' ').trim();
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function countPhrase(text) {
+  const mode = MODES[modeSel.value] || MODES.normal;
+  const w = norm(text).split(' ').filter(Boolean);
+  let hits = 0;
+  for (let i = 0; i < w.length; i++) {
+    for (const len of [3, 2, 1, 4]) {          // "an der stelle", "ander stelle", "anderstelle", "an der der stelle"
+      if (i + len > w.length) continue;
+      const last = w[i + len - 1];
+      if (lev(last.slice(-7).replace(/n$/, '').slice(-6), 'stelle') > mode.stelle) continue;
+      const cand = w.slice(i, i + len).join(' ');
+      const d = Math.min(lev(cand, TARGET), lev(cand.replace(/ /g, ''), TARGET.replace(/ /g, '')));
+      if (d <= mode.max) { hits++; i += len - 1; break; }
+    }
+  }
+  return hits;
+}
 
 function setVoiceUi(state, text) {
   voiceBtn.classList.toggle('on', voiceOn);
   voiceBtn.textContent = voiceOn ? '⏹ Spracherkennung aus' : '🎤 Spracherkennung an';
   voiceStatus.className = 'voice-status ' + state;
   voiceStatus.textContent = text;
+}
+
+// Pegelanzeige: zeigt, ob das Mikrofon die Stimme überhaupt hört (wichtig bei großer Entfernung).
+let meterStream = null, meterCtx = null, meterRaf = null;
+async function startMeter() {
+  try {
+    meterStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+    });
+    meterCtx = new AudioContext();
+    const an = meterCtx.createAnalyser();
+    an.fftSize = 1024;
+    meterCtx.createMediaStreamSource(meterStream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const loop = () => {
+      an.getFloatTimeDomainData(buf);
+      let sum = 0; for (const v of buf) sum += v * v;
+      const db = 20 * Math.log10(Math.sqrt(sum / buf.length) + 1e-8);   // ca. -80 … 0
+      meterBar.style.width = Math.max(0, Math.min(100, (db + 70) / 55 * 100)) + '%';
+      meterRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  } catch (e) { console.warn('Pegelanzeige nicht verfügbar', e); }
+}
+function stopMeter() {
+  cancelAnimationFrame(meterRaf);
+  meterStream && meterStream.getTracks().forEach(t => t.stop());
+  meterCtx && meterCtx.close();
+  meterStream = meterCtx = null;
+  meterBar.style.width = '0%';
 }
 
 if (!SR) {
@@ -643,9 +768,21 @@ if (!SR) {
   setVoiceUi('off', 'Aus. Wenn an, wird jedes „an der Stelle“ automatisch gezählt.');
   voiceBtn.addEventListener('click', () => {
     voiceOn = !voiceOn;
-    if (voiceOn) startVoice();
-    else { rec && rec.stop(); setVoiceUi('off', 'Aus.'); }
+    if (voiceOn) { startVoice(); startMeter(); }
+    else { rec && rec.stop(); stopMeter(); setVoiceUi('off', 'Aus.'); }
   });
+}
+
+function onPhrase(text) {
+  voiceHeard.textContent = `Erkannt in: „${text.trim()}“`;
+  // Wurde gerade schon gezählt (von einem anderen Gerät oder per Knopf), ist das
+  // derselbe Satz, nur später erkannt → ignorieren.
+  const since = lastMs == null ? Infinity : serverNow() - lastMs;
+  if (since < VOICE_WINDOW_MS) {
+    setVoiceUi('listening', `Schon gezählt (vor ${(since / 1000).toFixed(1)} s) – nicht doppelt.`);
+    return;
+  }
+  doClick('voice');
 }
 
 function startVoice() {
@@ -653,41 +790,42 @@ function startVoice() {
   rec.lang = 'de-DE';
   rec.continuous = true;
   rec.interimResults = true;
+  rec.maxAlternatives = 5;
+  // Neuere Chrome-Versionen: Erkennung gezielt auf die Phrase trimmen (wird sonst ignoriert).
+  try {
+    if ('phrases' in rec && window.SpeechRecognitionPhrase) rec.phrases = [new SpeechRecognitionPhrase('an der Stelle', 10)];
+  } catch { /* nicht unterstützt */ }
   counted = [];
   rec.onstart = () => setVoiceUi('listening', 'Hört zu … sag „an der Stelle“.');
   rec.onresult = ev => {
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
-      const text = ev.results[i][0].transcript;
-      const hits = (text.match(PHRASE) || []).length;
-      if (hits > (counted[i] || 0)) {
-        counted[i] = hits;
-        voiceHeard.textContent = `Gehört: „${text.trim()}“`;
-        // Wurde gerade schon gezählt (von einem anderen Gerät oder per Knopf), ist das
-        // derselbe Satz, nur später erkannt → ignorieren.
-        const since = lastMs == null ? Infinity : serverNow() - lastMs;
-        if (since < VOICE_WINDOW_MS) {
-          setVoiceUi('listening', `Schon gezählt (vor ${(since / 1000).toFixed(1)} s) – nicht doppelt.`);
-          continue;
-        }
-        doClick('voice');
-      } else if (ev.results[i].isFinal) {
-        voiceHeard.textContent = `Gehört: „${text.trim()}“`;
+      const res = ev.results[i];
+      let best = 0, bestText = res[0].transcript;
+      for (let a = 0; a < res.length; a++) {
+        const h = countPhrase(res[a].transcript);
+        if (h > best) { best = h; bestText = res[a].transcript; }
+      }
+      if (best > (counted[i] || 0)) {
+        counted[i] = best;
+        onPhrase(bestText);
+      } else if (res.isFinal) {
+        voiceHeard.textContent = `Gehört: „${res[0].transcript.trim()}“`;
       }
     }
   };
   rec.onerror = ev => {
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       voiceOn = false;
+      stopMeter();
       setVoiceUi('error', 'Kein Mikrofon-Zugriff. Bitte im Browser erlauben.');
     } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
-      setVoiceUi('error', 'Fehler: ' + ev.error);
+      setVoiceUi('error', 'Fehler: ' + ev.error + ' – starte neu …');
     }
   };
-  // Chrome beendet die Erkennung regelmäßig von selbst – dann neu starten.
-  rec.onend = () => { if (voiceOn) setTimeout(() => { if (voiceOn) startVoice(); }, 300); };
+  // Chrome beendet die Erkennung regelmäßig von selbst – dann sofort neu starten.
+  rec.onend = () => { if (voiceOn) setTimeout(() => { if (voiceOn) startVoice(); }, 150); };
   try { rec.start(); } catch (e) { console.error(e); }
 }
-
 </script>
 </body>
 </html>

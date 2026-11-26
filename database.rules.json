@@ -3,27 +3,22 @@
     "state": {
       ".read": true,
       ".write": "newData.exists()",
-      ".validate": "newData.hasChildren(['total', 'last']) && newData.child('total').val() === (data.exists() ? data.child('total').val() : 0) + 1 && newData.child('last').val() === now && (!data.exists() || now >= data.child('last').val() + 5000)",
+      ".validate": "newData.hasChildren(['total', 'last']) && ((newData.child('total').val() === (data.exists() ? data.child('total').val() : 0) + 1 && newData.child('last').val() === now && (!data.exists() || now >= data.child('last').val() + 5000)) || (data.exists() && newData.child('total').val() === data.child('total').val() - 1 && newData.child('last').val() === data.child('last').val() && newData.child('lastUndo').isString() && root.child('logs/' + newData.child('lastUndo').val() + '/accepted').val() === true && !root.child('logs/' + newData.child('lastUndo').val() + '/removed').exists() && newData.parent().child('logs/' + newData.child('lastUndo').val() + '/removed').val() === true))",
       "total": { ".validate": "newData.isNumber()" },
       "last": { ".validate": "newData.isNumber()" },
+      "lastUndo": { ".validate": "newData.isString() && newData.val().length <= 40" },
       "$other": { ".validate": false }
-    },
-    "hours": {
-      ".read": true,
-      ".indexOn": ".value",
-      "$h": {
-        ".write": "newData.exists()",
-        ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && $h.matches(/^[0-9]{6,7}$/) && newData.parent().parent().child('state/total').val() === (root.child('state/total').exists() ? root.child('state/total').val() : 0) + 1"
-      }
     },
     "logs": {
       ".read": true,
       "$id": {
-        ".write": "!data.exists() && newData.exists()",
-        ".validate": "newData.hasChildren(['ts', 'name', 'accepted']) && newData.child('ts').val() === now && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 30 && newData.child('accepted').isBoolean() && (newData.child('accepted').val() === false || newData.parent().parent().child('state/total').val() === (root.child('state/total').exists() ? root.child('state/total').val() : 0) + 1)",
-        "ts": { ".validate": true },
-        "name": { ".validate": true },
-        "accepted": { ".validate": true },
+        ".write": "newData.exists() && (!data.exists() || (data.child('accepted').val() === true && !data.child('removed').exists()))",
+        ".validate": "newData.hasChildren(['ts', 'name', 'accepted']) && (!data.exists() ? (newData.child('ts').val() === now && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 30 && !newData.child('removed').exists() && (newData.child('accepted').val() === false || newData.parent().parent().child('state/total').val() === (root.child('state/total').exists() ? root.child('state/total').val() : 0) + 1)) : (newData.child('ts').val() === data.child('ts').val() && newData.child('name').val() === data.child('name').val() && newData.child('accepted').val() === true && newData.child('removed').val() === true && newData.parent().parent().child('state/lastUndo').val() === $id && newData.parent().parent().child('state/total').val() === root.child('state/total').val() - 1))",
+        "ts": { ".validate": "newData.isNumber()" },
+        "name": { ".validate": "newData.isString()" },
+        "accepted": { ".validate": "newData.isBoolean()" },
+        "removed": { ".validate": "newData.val() === true" },
+        "removedAt": { ".validate": "newData.val() === now" },
         "$other": { ".validate": false }
       }
     }
