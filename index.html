@@ -101,6 +101,7 @@
     transition: filter .3s;
   }
   .ring.ready { filter: drop-shadow(0 0 22px rgba(124,92,255,.55)); }
+  .ring.spam { background: conic-gradient(var(--bad) calc(var(--p) * 1turn), rgba(251,113,133,.12) 0); }
   button#click {
     width: 100%; height: 100%; border-radius: 50%; border: 6px solid var(--bg); cursor: pointer;
     font: 800 44px Inter, system-ui, sans-serif; color: #fff; letter-spacing: -.02em;
@@ -549,11 +550,47 @@ setInterval(renderLastWhen, 1000);
 function remainingMs() {
   return lastMs == null ? 0 : Math.max(0, lastMs + COOLDOWN_MS - serverNow());
 }
+// ---------- Spam-Sperre (pro Gerät) ----------
+// Wer zu oft hintereinander per Knopf zählt, wird auf diesem Gerät kurz gesperrt.
+// Spracherkennung ist ausgenommen.
+const SPAM_CLICKS = cfg.SPAM_CLICKS ?? 3;
+const SPAM_WINDOW_MS = (cfg.SPAM_WINDOW_SECONDS ?? 15) * 1000;
+const SPAM_LOCK_MS = (cfg.SPAM_LOCK_SECONDS ?? 60) * 1000;
+let ownClicks = JSON.parse(localStorage.getItem('klicker-own-clicks') || '[]');
+let spamUntil = Number(localStorage.getItem('klicker-spam-until')) || 0;
+function spamRemainingMs() { return Math.max(0, spamUntil - Date.now()); }
+function registerOwnClick() {   // true = jetzt gesperrt
+  const now = Date.now();
+  ownClicks = ownClicks.filter(t => now - t < SPAM_WINDOW_MS);
+  ownClicks.push(now);
+  let locked = false;
+  if (ownClicks.length >= SPAM_CLICKS) {
+    spamUntil = now + SPAM_LOCK_MS;
+    ownClicks = [];
+    locked = true;
+  }
+  localStorage.setItem('klicker-own-clicks', JSON.stringify(ownClicks));
+  localStorage.setItem('klicker-spam-until', String(spamUntil));
+  return locked;
+}
+
 let lastLabel = '';
 function tick() {
   if (!loaded) return;
+  const spam = spamRemainingMs();
   const rem = remainingMs();
-  btn.disabled = sending || rem > 0;
+  btn.disabled = sending || rem > 0 || spam > 0;
+  ring.classList.toggle('spam', spam > 0);
+  if (spam > 0) {
+    ring.style.setProperty('--p', (1 - spam / SPAM_LOCK_MS).toFixed(3));
+    ring.classList.remove('ready');
+    const label = 'spam|' + Math.ceil(spam / 1000);
+    if (label !== lastLabel) {
+      lastLabel = label;
+      btn.replaceChildren(`🚫 ${Math.ceil(spam / 1000)} s`, el('span', 'sub', 'zu oft geklickt'));
+    }
+    return;
+  }
   ring.style.setProperty('--p', (1 - rem / COOLDOWN_MS).toFixed(3));
   ring.classList.toggle('ready', rem === 0 && !sending);
   const label = rem > 0 ? (rem / 1000).toFixed(1) + '|gesperrt' : '+1';
@@ -623,6 +660,7 @@ $('overlay').addEventListener('click', () => { $('overlay').hidden = true; });
 // ---------- Klicken ----------
 async function doClick(source) {
   if (sending || !loaded || remainingMs() > 0) return false;
+  if (source === 'button' && spamRemainingMs() > 0) return false;
   let name = cleanName(nameInput.value);
   if (source === 'voice') name = name.slice(0, 27) + ' 🎤';
   sending = true; tick();
@@ -633,6 +671,10 @@ async function doClick(source) {
       ['logs/' + logKey]: { ts: serverTimestamp(), name, accepted: true },
     });
     floatPlusOne();
+    if (source === 'button' && registerOwnClick()) {
+      showMsg('bad', `🚫 ${SPAM_CLICKS} Klicks in ${SPAM_WINDOW_MS / 1000} s – du bist ${SPAM_LOCK_MS / 1000} s gesperrt.`);
+      return true;
+    }
     showMsg('ok', source === 'voice' ? '🎤 „An der Stelle“ erkannt – gezählt!' : 'Gezählt! Danke fürs Klicken 🎉');
     if (Math.random() < FUNNY_CHANCE) showFunnyImage();
     return true;

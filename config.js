@@ -19,4 +19,10 @@ window.FIREBASE_CONFIG = {
   // Spracherkennung: Hören mehrere Geräte denselben Satz, zählt nur das erste.
   // Innerhalb dieser Sekunden nach einem gezählten Klick wird "an der Stelle" ignoriert.
   VOICE_DEDUPE_SECONDS: 8,
+
+  // Spam-Sperre: Wer SPAM_CLICKS gezählte Klicks innerhalb von SPAM_WINDOW_SECONDS macht,
+  // wird auf seinem Gerät für SPAM_LOCK_SECONDS gesperrt. (Spracherkennung ist ausgenommen.)
+  SPAM_CLICKS: 3,
+  SPAM_WINDOW_SECONDS: 15,
+  SPAM_LOCK_SECONDS: 60,
 };
