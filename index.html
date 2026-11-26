@@ -75,7 +75,23 @@
     display: inline-block; transition: transform .25s cubic-bezier(.2,1.6,.4,1);
   }
   .total.bump { transform: scale(1.08); }
-  .total-label { color: var(--muted); font-weight: 500; margin: 6px 0 30px; }
+  .total-label { color: var(--muted); font-weight: 500; margin: 6px 0 22px; }
+
+  .last-click {
+    display: inline-flex; align-items: center; gap: 10px; max-width: 100%;
+    margin: 0 auto 26px; padding: 6px 16px 6px 6px; border-radius: 999px;
+    background: rgba(0,0,0,.25); border: 1px solid var(--border); font-size: 14px; color: var(--muted);
+  }
+  .last-click[hidden] { display: none; }
+  .last-click.new { animation: lcPop .6s ease-out; }
+  @keyframes lcPop { 0% { border-color: rgba(52,211,153,.9); box-shadow: 0 0 0 6px rgba(52,211,153,.18); } 100% { border-color: var(--border); box-shadow: none; } }
+  .lc-avatar {
+    width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--a1), var(--a2)); color: #fff; font-weight: 800; font-size: 13px;
+  }
+  .lc-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lc-text b { color: var(--text); font-weight: 700; }
+  .lc-when::before { content: ' · '; }
 
   .stage { position: relative; display: inline-block; }
   .ring {
@@ -192,6 +208,11 @@
   <section class="card hero">
     <div class="total" id="total">–</div>
     <div class="total-label">Klicks insgesamt</div>
+
+    <div class="last-click" id="last-click" hidden>
+      <span class="lc-avatar" id="lc-avatar"></span>
+      <span class="lc-text">Letzter Klick von <b id="lc-name"></b><span class="lc-when" id="lc-when"></span></span>
+    </div>
 
     <div class="stage" id="stage">
       <div class="ring" id="ring">
@@ -360,7 +381,36 @@ onValue(query(ref(db, 'logs'), orderByKey(), limitToLast(50)), snap => {
     tb.append(tr);
   }
   seenLogs = new Set(rows.map(r => r.key));
+
+  const lastOk = rows.find(r => r.accepted);
+  if (lastOk) {
+    const box = $('last-click');
+    if (lastClickKey && lastClickKey !== lastOk.key) {
+      box.classList.remove('new'); void box.offsetWidth; box.classList.add('new');
+    }
+    lastClickKey = lastOk.key;
+    lastClickTs = typeof lastOk.ts === 'number' ? lastOk.ts : serverNow();
+    $('lc-name').textContent = lastOk.name;
+    $('lc-avatar').textContent = [...lastOk.name][0].toUpperCase();
+    box.hidden = false;
+    renderLastWhen();
+  }
 }, dbError);
+
+// ---------- Letzter Klick ----------
+let lastClickKey = null, lastClickTs = null;
+function renderLastWhen() {
+  if (lastClickTs == null) return;
+  const s = Math.max(0, Math.floor((serverNow() - lastClickTs) / 1000));
+  let txt;
+  if (s < 5) txt = 'gerade eben';
+  else if (s < 60) txt = `vor ${s} s`;
+  else if (s < 3600) txt = `vor ${Math.floor(s / 60)} min`;
+  else if (s < 86400) txt = `vor ${Math.floor(s / 3600)} h`;
+  else txt = `am ${fmtDate(lastClickTs)}`;
+  $('lc-when').textContent = `${txt} (${fmtClock(lastClickTs)} Uhr)`;
+}
+setInterval(renderLastWhen, 1000);
 
 // ---------- Knopf ----------
 function remainingMs() {
