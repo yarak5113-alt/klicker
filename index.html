@@ -226,13 +226,13 @@
 
   <div class="grid">
     <section class="card">
-      <h2>Diese Stunde</h2>
+      <h2 id="block-title">Aktueller Block</h2>
       <div class="big" id="this-hour">–</div>
       <div class="bar"><i id="hour-bar"></i></div>
-      <div class="hint" id="hour-hint">Maximal 720 Klicks pro Stunde möglich</div>
+      <div class="hint" id="hour-hint"></div>
     </section>
     <section class="card">
-      <h2>🏆 Rekorde pro Stunde</h2>
+      <h2>🏆 Rekorde pro Block</h2>
       <ol class="records" id="records"><li class="empty">Noch keine Klicks</li></ol>
     </section>
   </div>
@@ -258,7 +258,7 @@ import {
   update, push, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
-const COOLDOWN_MS = 5000, HOUR_MS = 3600000, MAX_PER_HOUR = HOUR_MS / COOLDOWN_MS;
+const COOLDOWN_MS = 5000;
 const $ = id => document.getElementById(id);
 const btn = $('click'), msg = $('msg'), nameInput = $('name'), ring = $('ring');
 
@@ -275,16 +275,11 @@ if (!cfg.databaseURL) {
 const db = getDatabase(initializeApp(cfg));
 
 let loaded = false, total = null, lastMs = null, serverOffset = 0, sending = false;
-let thisHourCount = 0, bestHour = 0;
 const serverNow = () => Date.now() + serverOffset;
 const de = n => Number(n).toLocaleString('de-DE');
 
 const fmtDate = ts => new Date(ts).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
 const fmtClock = ts => new Date(ts).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-const fmtHour = ts => {
-  const h = x => new Date(x).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-  return `${fmtDate(ts)} · ${h(ts)}–${h(ts + HOUR_MS)}`;
-};
 const cleanName = s => s.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 30) || 'Anonym';
 const showMsg = (cls, text) => { msg.className = 'msg ' + cls; msg.textContent = text; };
 const isDenied = e => /permission/i.test(String(e && (e.code || e.message)));
@@ -317,60 +312,99 @@ onValue(ref(db, 'state'), snap => {
   tick();
 }, dbError);
 
-// ---------- Rekorde ----------
-onValue(query(ref(db, 'hours'), orderByValue(), limitToLast(5)), snap => {
-  const list = [];
-  snap.forEach(c => { list.push({ hourStart: Number(c.key) * HOUR_MS, count: c.val() }); });
-  list.reverse();
-  bestHour = list[0]?.count ?? 0;
-  renderHour();
+// ---------- Zeitblöcke (aus config.js) ----------
+const TZ = cfg.TIMEZONE || 'Europe/Berlin';
+const toMin = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+const BLOCKS = (cfg.BLOCKS && cfg.BLOCKS.length ? cfg.BLOCKS : [{ start: '09:45', end: '11:15' }, { start: '11:30', end: '13:00' }])
+  .map(b => ({ label: `${b.start}–${b.end}`, s: toMin(b.start), e: toMin(b.end) }))
+  .sort((a, b) => a.s - b.s);
+const partsFmt = new Intl.DateTimeFormat('de-DE', {
+  timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+function localParts(ts) {
+  const p = {};
+  for (const x of partsFmt.formatToParts(ts)) p[x.type] = x.value;
+  return { date: `${p.day}.${p.month}.${p.year}`, dateKey: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) * 60 + Number(p.minute) };
+}
+function blockAt(ts) {
+  const p = localParts(ts);
+  const i = BLOCKS.findIndex(b => p.min >= b.s && p.min < b.e);
+  return i < 0 ? null : { key: `${p.dateKey}#${i}`, date: p.date, block: BLOCKS[i] };
+}
+
+// Rekorde werden aus allen gezählten Klicks im Log berechnet.
+let blockCounts = new Map();
+function computeBlocks(rows) {
+  blockCounts = new Map();
+  for (const r of rows) {
+    if (!r.accepted || typeof r.ts !== 'number') continue;
+    const b = blockAt(r.ts);
+    if (!b) continue;
+    const e = blockCounts.get(b.key) || { ...b, count: 0 };
+    e.count++;
+    blockCounts.set(b.key, e);
+  }
+  renderRecords();
+  renderBlock();
+}
+
+function renderRecords() {
+  const list = [...blockCounts.values()]
+    .sort((a, b) => b.count - a.count || (a.key < b.key ? 1 : -1))
+    .slice(0, 5);
   const rec = $('records');
   rec.replaceChildren();
-  if (!list.length) rec.append(el('li', 'empty', 'Noch keine Klicks'));
+  if (!list.length) rec.append(el('li', 'empty', 'Noch keine Klicks in einem Block'));
   const medals = ['🥇', '🥈', '🥉'];
   list.forEach((r, i) => {
     const li = el('li', i === 0 ? 'first' : '');
     li.append(
       medals[i] ? el('span', 'medal', medals[i]) : el('span', 'medal rank', `${i + 1}.`),
       el('span', 'rec-count', de(r.count)),
-      el('span', 'rec-when', fmtHour(r.hourStart)),
+      el('span', 'rec-when', `${r.date} · ${r.block.label} Uhr`),
     );
     rec.append(li);
   });
-}, dbError);
+}
 
-// ---------- Diese Stunde ----------
-function renderHour() {
-  $('this-hour').textContent = de(thisHourCount);
-  $('hour-bar').style.width = Math.min(100, thisHourCount / MAX_PER_HOUR * 100) + '%';
-  $('hour-hint').textContent = bestHour && thisHourCount >= bestHour
+function renderBlock() {
+  const now = serverNow();
+  const cur = blockAt(now);
+  const best = Math.max(0, ...[...blockCounts.values()].map(e => e.count));
+  if (!cur) {
+    const min = localParts(now).min;
+    const next = BLOCKS.find(b => b.s > min) || BLOCKS[0];
+    $('block-title').textContent = 'Aktueller Block';
+    $('this-hour').textContent = 'Pause';
+    $('hour-bar').style.width = '0%';
+    $('hour-hint').textContent = `Gerade läuft kein Block. Nächster: ${next.label} Uhr`;
+    return;
+  }
+  const count = blockCounts.get(cur.key)?.count ?? 0;
+  const max = Math.floor((cur.block.e - cur.block.s) * 60000 / COOLDOWN_MS);
+  $('block-title').textContent = `Aktueller Block · ${cur.block.label} Uhr`;
+  $('this-hour').textContent = de(count);
+  $('hour-bar').style.width = Math.min(100, count / max * 100) + '%';
+  $('hour-hint').textContent = count > 0 && count >= best
     ? '🔥 Neuer Rekord läuft gerade!'
-    : bestHour ? `Noch ${de(bestHour - thisHourCount + 1)} bis zum Rekord (${de(bestHour)})`
-    : `Maximal ${de(MAX_PER_HOUR)} Klicks pro Stunde möglich`;
+    : best ? `Noch ${de(best - count + 1)} bis zum Rekord (${de(best)})`
+    : `Maximal ${de(max)} Klicks in diesem Block möglich`;
 }
-let hourUnsub = null, watchedHour = null;
-function watchCurrentHour() {
-  const h = Math.floor(serverNow() / HOUR_MS);
-  if (h === watchedHour) return;
-  watchedHour = h;
-  if (hourUnsub) hourUnsub();
-  hourUnsub = onValue(ref(db, 'hours/' + h), s => { thisHourCount = s.val() ?? 0; renderHour(); }, dbError);
-}
-watchCurrentHour();
-setInterval(watchCurrentHour, 10000);
+setInterval(renderBlock, 10000);
 
 // ---------- Log ----------
 let seenLogs = null;
-onValue(query(ref(db, 'logs'), orderByKey(), limitToLast(50)), snap => {
+onValue(query(ref(db, 'logs'), orderByKey()), snap => {
   const rows = [];
   snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
-  rows.reverse();
+  rows.reverse();   // neueste zuerst
+  computeBlocks(rows);
   const tb = $('logs');
   tb.replaceChildren();
   if (!rows.length) {
     const tr = el('tr'); const td = el('td', 'empty', 'Noch keine Einträge'); td.colSpan = 3; tr.append(td); tb.append(tr);
   }
-  for (const l of rows) {
+  for (const l of rows.slice(0, 50)) {
     const tr = el('tr', seenLogs && !seenLogs.has(l.key) ? 'new' : '');
     const t = el('td', 'time');
     if (typeof l.ts === 'number') t.append(el('span', 'date', fmtDate(l.ts) + ' · '), fmtClock(l.ts));
@@ -445,11 +479,9 @@ btn.addEventListener('click', async () => {
     // Zähler, Stunde und Log in EINEM atomaren Schreibvorgang. Die Regeln lehnen ihn ab,
     // wenn seit dem letzten Klick weniger als 5 s (Serverzeit) vergangen sind oder
     // jemand anderes gerade schneller war (dann stimmt "total + 1" nicht mehr).
-    const h = Math.floor(serverNow() / HOUR_MS);
     const logKey = push(ref(db, 'logs')).key;
     await update(ref(db), {
       state: { total: (total ?? 0) + 1, last: serverTimestamp() },
-      ['hours/' + h]: (h === watchedHour ? thisHourCount : 0) + 1,
       ['logs/' + logKey]: { ts: serverTimestamp(), name, accepted: true },
     });
     floatPlusOne();
