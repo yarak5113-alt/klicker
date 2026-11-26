@@ -1,0 +1,13 @@
+{
+  "name": "klicker",
+  "version": "1.0.0",
+  "description": "Gemeinsamer Klick-Zähler mit SQLite, globalem 5-Sekunden-Cooldown, Stunden-Rekorden und Log",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klicker</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --text:#e8eaf0; --muted:#8b91a1; --accent:#4f8cff; --ok:#3ccf7a; --bad:#ff5d5d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .hero { text-align: center; }
+  .count { font-size: 72px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+  .count-label { color: var(--muted); margin-bottom: 20px; }
+  button#click {
+    width: 220px; height: 220px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: white; font-size: 28px; font-weight: 700;
+    box-shadow: 0 8px 0 #2d5fc4; transition: transform .05s, box-shadow .05s, background .2s;
+  }
+  button#click:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 2px 0 #2d5fc4; }
+  button#click:disabled { background: #3a3f4c; box-shadow: 0 8px 0 #262a33; cursor: not-allowed; }
+  .msg { min-height: 24px; margin-top: 16px; }
+  .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+  .name { margin-top: 16px; display:flex; gap:8px; justify-content:center; align-items:center; color: var(--muted); }
+  .name input { background:#0f1115; border:1px solid #2a2f3a; color:var(--text); border-radius:8px; padding:8px 10px; width: 180px; }
+  .stats { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  .stat-big { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  h2 { font-size: 16px; margin: 0 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  ol.records { margin:0; padding-left: 22px; }
+  ol.records li { padding: 3px 0; font-variant-numeric: tabular-nums; }
+  table { width:100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align:left; padding: 6px 8px; border-bottom: 1px solid #252935; }
+  th { color: var(--muted); font-weight: 600; }
+  .s-ok { color: var(--ok); } .s-bad { color: var(--bad); }
+  .empty { color: var(--muted); }
+  @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Klicker</h1>
+  <p class="sub">Ein Zähler für alle. Nach jedem Klick ist der Knopf für <b id="cd-sec">5</b> Sekunden für <b>alle</b> gesperrt.</p>
+
+  <section class="card hero">
+    <div class="count" id="total">–</div>
+    <div class="count-label">Klicks insgesamt</div>
+    <button id="click" disabled>+1</button>
+    <div class="msg" id="msg"></div>
+    <label class="name">Dein Name: <input id="name" maxlength="30" placeholder="Anonym"></label>
+  </section>
+
+  <div class="stats">
+    <section class="card">
+      <h2>Diese Stunde</h2>
+      <div class="stat-big" id="this-hour">–</div>
+    </section>
+    <section class="card">
+      <h2>Rekorde pro Stunde</h2>
+      <ol class="records" id="records"><li class="empty">Noch keine Klicks</li></ol>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Log (letzte 50 Versuche)</h2>
+    <table>
+      <thead><tr><th>Zeit</th><th>Name</th><th>Status</th></tr></thead>
+      <tbody id="logs"><tr><td colspan="3" class="empty">Noch keine Einträge</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const btn = $('click'), msg = $('msg'), nameInput = $('name');
+let state = null, clockOffset = 0, sending = false;
+
+nameInput.value = localStorage.getItem('klicker-name') || '';
+nameInput.addEventListener('input', () => localStorage.setItem('klicker-name', nameInput.value));
+
+const fmtTime = ts => new Date(ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const fmtHour = ts => {
+  const a = new Date(ts), b = new Date(ts + 3600000);
+  const d = a.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const h = x => x.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  return `${d}, ${h(a)}–${h(b)} Uhr`;
+};
+
+function render(s) {
+  state = s;
+  clockOffset = s.serverNow - Date.now();
+  $('cd-sec').textContent = Math.round(s.cooldownMs / 1000);
+  $('total').textContent = s.total.toLocaleString('de-DE');
+  $('this-hour').textContent = s.thisHour.toLocaleString('de-DE');
+
+  const rec = $('records');
+  rec.replaceChildren();
+  if (!s.records.length) {
+    const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Noch keine Klicks'; rec.append(li);
+  }
+  for (const r of s.records) {
+    const li = document.createElement('li');
+    li.textContent = `${r.count.toLocaleString('de-DE')} Klicks – ${fmtHour(r.hourStart)}`;
+    rec.append(li);
+  }
+
+  const tb = $('logs');
+  tb.replaceChildren();
+  if (!s.logs.length) {
+    const tr = document.createElement('tr'); const td = document.createElement('td');
+    td.colSpan = 3; td.className = 'empty'; td.textContent = 'Noch keine Einträge'; tr.append(td); tb.append(tr);
+  }
+  for (const l of s.logs) {
+    const tr = document.createElement('tr');
+    const t = document.createElement('td'); t.textContent = fmtTime(l.ts);
+    const n = document.createElement('td'); n.textContent = l.name;   // textContent = kein XSS
+    const st = document.createElement('td');
+    st.textContent = l.accepted ? '✅ gezählt' : '⛔ abgelehnt (Sperre)';
+    st.className = l.accepted ? 's-ok' : 's-bad';
+    tr.append(t, n, st); tb.append(tr);
+  }
+  tick();
+}
+
+function remainingMs() {
+  if (!state || state.lastAcceptedTs == null) return 0;
+  return Math.max(0, state.lastAcceptedTs + state.cooldownMs - (Date.now() + clockOffset));
+}
+
+function tick() {
+  if (!state) return;
+  const rem = remainingMs();
+  btn.disabled = sending || rem > 0;
+  btn.textContent = rem > 0 ? (rem / 1000).toFixed(1) + ' s' : '+1';
+}
+setInterval(tick, 100);
+
+btn.addEventListener('click', async () => {
+  sending = true; tick();
+  try {
+    const res = await fetch('/api/click', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nameInput.value }),
+    });
+    const r = await res.json();
+    if (r.ok) { msg.className = 'msg ok'; msg.textContent = 'Gezählt! +1'; }
+    else { msg.className = 'msg bad'; msg.textContent = `Zu spät – jemand war schneller. Noch ${(r.retryInMs / 1000).toFixed(1)} s gesperrt.`; }
+  } catch {
+    msg.className = 'msg bad'; msg.textContent = 'Verbindung fehlgeschlagen.';
+  } finally {
+    sending = false; tick();
+  }
+});
+
+// Live-Updates; bei Verbindungsabbruch verbindet EventSource sich selbst neu.
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onmessage = e => render(JSON.parse(e.data));
+}
+fetch('/api/state').then(r => r.json()).then(render).catch(() => {});
+connect();
+</script>
+</body>
+</html>
