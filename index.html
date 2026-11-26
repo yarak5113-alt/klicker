@@ -4,76 +4,229 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Klicker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0f1115; --card:#181b22; --text:#e8eaf0; --muted:#8b91a1; --accent:#4f8cff; --ok:#3ccf7a; --bad:#ff5d5d; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { margin: 0 0 4px; font-size: 28px; }
-  .sub { color: var(--muted); margin: 0 0 24px; }
-  .card { background: var(--card); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-  .hero { text-align: center; }
-  .count { font-size: 72px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
-  .count-label { color: var(--muted); margin-bottom: 20px; }
-  button#click {
-    width: 220px; height: 220px; border-radius: 50%; border: none; cursor: pointer;
-    background: var(--accent); color: white; font-size: 28px; font-weight: 700;
-    box-shadow: 0 8px 0 #2d5fc4; transition: transform .05s, box-shadow .05s, background .2s;
+  :root {
+    --bg: #0a0b14;
+    --card: rgba(255,255,255,.045);
+    --border: rgba(255,255,255,.08);
+    --text: #eef0f7;
+    --muted: #8d93a8;
+    --a1: #7c5cff;
+    --a2: #3fa9ff;
+    --ok: #34d399;
+    --bad: #fb7185;
+    --gold: #fbbf24;
   }
-  button#click:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 2px 0 #2d5fc4; }
-  button#click:disabled { background: #3a3f4c; box-shadow: 0 8px 0 #262a33; cursor: not-allowed; }
-  .msg { min-height: 24px; margin-top: 16px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(600px 400px at 15% -5%, rgba(124,92,255,.28), transparent 70%),
+      radial-gradient(500px 380px at 95% 10%, rgba(63,169,255,.20), transparent 70%),
+      radial-gradient(700px 500px at 50% 110%, rgba(124,92,255,.14), transparent 70%);
+  }
+  main { max-width: 820px; margin: 0 auto; padding: 40px 18px 72px; }
+
+  /* ---------- Kopf ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--a1), var(--a2)); font-weight: 900; font-size: 20px;
+    box-shadow: 0 8px 24px rgba(124,92,255,.35);
+  }
+  h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .tagline { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--border); font-size: 13px; color: var(--muted); font-weight: 500;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .live .dot { background: var(--ok); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: ping 1.8s infinite; }
+  .live { color: var(--ok); }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); } 100% { box-shadow: 0 0 0 9px rgba(52,211,153,0); } }
+
+  /* ---------- Karten ---------- */
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 22px; padding: 22px;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .card + .card, .grid + .card, .card + .grid { margin-top: 16px; }
+  h2 { margin: 0 0 14px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; }
+
+  .setup { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.08); color: #fde68a; margin-bottom: 16px; font-size: 14px; }
+
+  /* ---------- Hauptbereich ---------- */
+  .hero { text-align: center; padding: 34px 22px 28px; }
+  .total {
+    font-size: clamp(64px, 14vw, 104px); font-weight: 900; line-height: 1; letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, #fff 30%, #b9b3ff); -webkit-background-clip: text; background-clip: text; color: transparent;
+    display: inline-block; transition: transform .25s cubic-bezier(.2,1.6,.4,1);
+  }
+  .total.bump { transform: scale(1.08); }
+  .total-label { color: var(--muted); font-weight: 500; margin: 6px 0 30px; }
+
+  .stage { position: relative; display: inline-block; }
+  .ring {
+    --p: 1;
+    width: 248px; height: 248px; border-radius: 50%; padding: 10px; margin: 0 auto;
+    background: conic-gradient(var(--a2), var(--a1) calc(var(--p) * 1turn), rgba(255,255,255,.07) 0);
+    transition: filter .3s;
+  }
+  .ring.ready { filter: drop-shadow(0 0 22px rgba(124,92,255,.55)); }
+  button#click {
+    width: 100%; height: 100%; border-radius: 50%; border: 6px solid var(--bg); cursor: pointer;
+    font: 800 44px Inter, system-ui, sans-serif; color: #fff; letter-spacing: -.02em;
+    background: radial-gradient(circle at 30% 25%, #9d86ff, var(--a1) 45%, #4b3bd1);
+    box-shadow: inset 0 -10px 24px rgba(0,0,0,.28), inset 0 8px 20px rgba(255,255,255,.18);
+    transition: transform .08s, background .3s, color .3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button#click:hover:not(:disabled) { transform: scale(1.03); }
+  button#click:active:not(:disabled) { transform: scale(.95); }
+  button#click:disabled {
+    cursor: not-allowed; color: #c7cbe0; font-size: 34px;
+    background: radial-gradient(circle at 30% 25%, #2c3047, #1a1d2c 60%);
+  }
+  button#click .sub { display: block; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .02em; margin-top: 2px; }
+  .float {
+    position: absolute; left: 50%; top: 40%; transform: translate(-50%, 0); pointer-events: none;
+    font-weight: 900; font-size: 34px; color: var(--ok); text-shadow: 0 4px 18px rgba(52,211,153,.5);
+    animation: floatUp .9s ease-out forwards;
+  }
+  @keyframes floatUp { to { transform: translate(-50%, -110px); opacity: 0; } }
+
+  .msg { min-height: 22px; margin-top: 22px; font-weight: 600; font-size: 15px; }
   .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
-  .name { margin-top: 16px; display:flex; gap:8px; justify-content:center; align-items:center; color: var(--muted); }
-  .name input { background:#0f1115; border:1px solid #2a2f3a; color:var(--text); border-radius:8px; padding:8px 10px; width: 180px; }
-  .stats { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-  .stat-big { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  h2 { font-size: 16px; margin: 0 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  ol.records { margin:0; padding-left: 22px; }
-  ol.records li { padding: 3px 0; font-variant-numeric: tabular-nums; }
-  table { width:100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
-  th, td { text-align:left; padding: 6px 8px; border-bottom: 1px solid #252935; }
-  th { color: var(--muted); font-weight: 600; }
-  .s-ok { color: var(--ok); } .s-bad { color: var(--bad); }
-  .empty { color: var(--muted); }
-  .setup { border: 1px solid #ffb84d; color: #ffd28a; }
-  .setup code { background:#0f1115; padding: 1px 5px; border-radius: 4px; }
-  @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
+
+  .name {
+    margin: 18px auto 0; display: flex; align-items: center; gap: 10px; max-width: 320px;
+    background: rgba(0,0,0,.25); border: 1px solid var(--border); border-radius: 999px; padding: 6px 6px 6px 16px;
+  }
+  .name span { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .name input {
+    flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--text);
+    font: 600 15px Inter, system-ui, sans-serif; padding: 8px 10px; border-radius: 999px;
+  }
+  .name:focus-within { border-color: rgba(124,92,255,.6); box-shadow: 0 0 0 4px rgba(124,92,255,.15); }
+
+  /* ---------- Statistik ---------- */
+  .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 16px; margin-top: 16px; }
+  .big { font-size: 44px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; margin-top: 16px; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--a1), var(--a2)); transition: width .4s; }
+
+  ol.records { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  ol.records li {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px;
+    background: rgba(255,255,255,.03); border: 1px solid transparent; font-variant-numeric: tabular-nums;
+  }
+  ol.records li.first { border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.07); }
+  .medal { width: 28px; text-align: center; font-size: 20px; flex: none; }
+  .rank { color: var(--muted); font-weight: 700; font-size: 14px; }
+  .rec-count { font-weight: 800; font-size: 17px; }
+  .rec-when { color: var(--muted); font-size: 13px; margin-left: auto; text-align: right; }
+
+  /* ---------- Log ---------- */
+  .log-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .table-wrap { max-height: 440px; overflow: auto; margin: 0 -8px; padding: 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th {
+    position: sticky; top: 0; background: #12131f; text-align: left; padding: 10px; z-index: 1;
+    color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  }
+  td { padding: 11px 10px; border-top: 1px solid var(--border); }
+  td.time { color: var(--muted); white-space: nowrap; }
+  td.who { font-weight: 600; word-break: break-word; }
+  tr.new td { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: rgba(124,92,255,.18); } to { background: transparent; } }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .chip.ok { color: var(--ok); background: rgba(52,211,153,.12); }
+  .chip.bad { color: var(--bad); background: rgba(251,113,133,.12); }
+
+  .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 14px; }
+  ol.records li.empty { display: block; background: transparent; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; opacity: .7; }
+
+  @media (max-width: 640px) {
+    main { padding-top: 24px; }
+    .grid { grid-template-columns: 1fr; }
+    .ring { width: 216px; height: 216px; }
+    .rec-when { font-size: 12px; }
+    td.time .date { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Klicker</h1>
-  <p class="sub">Ein Zähler für alle. Nach jedem Klick ist der Knopf für <b>5</b> Sekunden für <b>alle</b> gesperrt.</p>
+  <header>
+    <div class="brand">
+      <div class="logo">+1</div>
+      <div>
+        <h1>Klicker</h1>
+        <p class="tagline">Ein Zähler. Alle zusammen.</p>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill">🔒 5 s Sperre für alle</span>
+      <span class="pill" id="conn"><span class="dot"></span><span id="conn-text">Verbinde…</span></span>
+    </div>
+  </header>
 
   <section class="card setup" id="setup" hidden></section>
 
   <section class="card hero">
-    <div class="count" id="total">–</div>
-    <div class="count-label">Klicks insgesamt</div>
-    <button id="click" disabled>+1</button>
+    <div class="total" id="total">–</div>
+    <div class="total-label">Klicks insgesamt</div>
+
+    <div class="stage" id="stage">
+      <div class="ring" id="ring">
+        <button id="click" disabled>+1</button>
+      </div>
+    </div>
+
     <div class="msg" id="msg"></div>
-    <label class="name">Dein Name: <input id="name" maxlength="30" placeholder="Anonym"></label>
+    <label class="name"><span>Dein Name</span><input id="name" maxlength="30" placeholder="Anonym" autocomplete="nickname"></label>
   </section>
 
-  <div class="stats">
+  <div class="grid">
     <section class="card">
       <h2>Diese Stunde</h2>
-      <div class="stat-big" id="this-hour">–</div>
+      <div class="big" id="this-hour">–</div>
+      <div class="bar"><i id="hour-bar"></i></div>
+      <div class="hint" id="hour-hint">Maximal 720 Klicks pro Stunde möglich</div>
     </section>
     <section class="card">
-      <h2>Rekorde pro Stunde</h2>
+      <h2>🏆 Rekorde pro Stunde</h2>
       <ol class="records" id="records"><li class="empty">Noch keine Klicks</li></ol>
     </section>
   </div>
 
   <section class="card">
-    <h2>Log (letzte 50 Versuche)</h2>
-    <table>
-      <thead><tr><th>Zeit</th><th>Name</th><th>Status</th></tr></thead>
-      <tbody id="logs"><tr><td colspan="3" class="empty">Noch keine Einträge</td></tr></tbody>
-    </table>
+    <div class="log-head"><h2>Log</h2><h2>Letzte 50 Versuche</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Zeit</th><th>Name</th><th>Status</th></tr></thead>
+        <tbody id="logs"><tr><td colspan="3" class="empty">Noch keine Einträge</td></tr></tbody>
+      </table>
+    </div>
   </section>
+
+  <footer>Nach jedem gezählten Klick ist der Knopf für alle 5 Sekunden gesperrt. Wer zu spät drückt, landet als „abgelehnt“ im Log.</footer>
 </main>
 
 <script src="config.js"></script>
@@ -84,9 +237,9 @@ import {
   update, push, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
-const COOLDOWN_MS = 5000, HOUR_MS = 3600000;
+const COOLDOWN_MS = 5000, HOUR_MS = 3600000, MAX_PER_HOUR = HOUR_MS / COOLDOWN_MS;
 const $ = id => document.getElementById(id);
-const btn = $('click'), msg = $('msg'), nameInput = $('name');
+const btn = $('click'), msg = $('msg'), nameInput = $('name'), ring = $('ring');
 
 nameInput.value = localStorage.getItem('klicker-name') || '';
 nameInput.addEventListener('input', () => localStorage.setItem('klicker-name', nameInput.value));
@@ -100,15 +253,16 @@ if (!cfg.databaseURL) {
 }
 const db = getDatabase(initializeApp(cfg));
 
-let loaded = false, total = 0, lastMs = null, serverOffset = 0, sending = false;
+let loaded = false, total = null, lastMs = null, serverOffset = 0, sending = false;
+let thisHourCount = 0, bestHour = 0;
 const serverNow = () => Date.now() + serverOffset;
+const de = n => Number(n).toLocaleString('de-DE');
 
-const fmtTime = ts => new Date(ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const fmtDate = ts => new Date(ts).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+const fmtClock = ts => new Date(ts).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 const fmtHour = ts => {
-  const a = new Date(ts), b = new Date(ts + HOUR_MS);
-  const d = a.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const h = x => x.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-  return `${d}, ${h(a)}–${h(b)} Uhr`;
+  const h = x => new Date(x).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  return `${fmtDate(ts)} · ${h(ts)}–${h(ts + HOUR_MS)}`;
 };
 const cleanName = s => s.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 30) || 'Anonym';
 const showMsg = (cls, text) => { msg.className = 'msg ' + cls; msg.textContent = text; };
@@ -118,81 +272,121 @@ const dbError = e => {
   if (isDenied(e)) showSetup('Kein Zugriff auf die Datenbank: Bitte die Regeln aus database.rules.json in Firebase veröffentlichen (siehe README).');
   else showMsg('bad', 'Datenbank nicht erreichbar.');
 };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-// ---------- Live-Daten ----------
+// ---------- Verbindung ----------
+onValue(ref(db, '.info/connected'), s => {
+  const on = s.val() === true;
+  $('conn').classList.toggle('live', on);
+  $('conn-text').textContent = on ? 'Live' : 'Offline';
+});
 onValue(ref(db, '.info/serverTimeOffset'), s => { serverOffset = s.val() || 0; });
 
+// ---------- Gesamtzähler ----------
 onValue(ref(db, 'state'), snap => {
   const d = snap.val();
-  total = d?.total ?? 0;
+  const newTotal = d?.total ?? 0;
+  if (total !== null && newTotal > total) {
+    const t = $('total'); t.classList.add('bump'); setTimeout(() => t.classList.remove('bump'), 220);
+  }
+  total = newTotal;
   lastMs = d?.last ?? null;
-  $('total').textContent = total.toLocaleString('de-DE');
+  $('total').textContent = de(total);
   loaded = true;
   tick();
 }, dbError);
 
+// ---------- Rekorde ----------
 onValue(query(ref(db, 'hours'), orderByValue(), limitToLast(5)), snap => {
   const list = [];
   snap.forEach(c => { list.push({ hourStart: Number(c.key) * HOUR_MS, count: c.val() }); });
-  list.reverse();   // größter Wert zuerst
+  list.reverse();
+  bestHour = list[0]?.count ?? 0;
+  renderHour();
   const rec = $('records');
   rec.replaceChildren();
-  if (!list.length) {
-    const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Noch keine Klicks'; rec.append(li);
-  }
-  for (const r of list) {
-    const li = document.createElement('li');
-    li.textContent = `${r.count.toLocaleString('de-DE')} Klicks – ${fmtHour(r.hourStart)}`;
+  if (!list.length) rec.append(el('li', 'empty', 'Noch keine Klicks'));
+  const medals = ['🥇', '🥈', '🥉'];
+  list.forEach((r, i) => {
+    const li = el('li', i === 0 ? 'first' : '');
+    li.append(
+      medals[i] ? el('span', 'medal', medals[i]) : el('span', 'medal rank', `${i + 1}.`),
+      el('span', 'rec-count', de(r.count)),
+      el('span', 'rec-when', fmtHour(r.hourStart)),
+    );
     rec.append(li);
-  }
+  });
 }, dbError);
 
-let hourUnsub = null, watchedHour = null, thisHourCount = 0;
+// ---------- Diese Stunde ----------
+function renderHour() {
+  $('this-hour').textContent = de(thisHourCount);
+  $('hour-bar').style.width = Math.min(100, thisHourCount / MAX_PER_HOUR * 100) + '%';
+  $('hour-hint').textContent = bestHour && thisHourCount >= bestHour
+    ? '🔥 Neuer Rekord läuft gerade!'
+    : bestHour ? `Noch ${de(bestHour - thisHourCount + 1)} bis zum Rekord (${de(bestHour)})`
+    : `Maximal ${de(MAX_PER_HOUR)} Klicks pro Stunde möglich`;
+}
+let hourUnsub = null, watchedHour = null;
 function watchCurrentHour() {
   const h = Math.floor(serverNow() / HOUR_MS);
   if (h === watchedHour) return;
   watchedHour = h;
   if (hourUnsub) hourUnsub();
-  hourUnsub = onValue(ref(db, 'hours/' + h), s => {
-    thisHourCount = s.val() ?? 0;
-    $('this-hour').textContent = thisHourCount.toLocaleString('de-DE');
-  }, dbError);
+  hourUnsub = onValue(ref(db, 'hours/' + h), s => { thisHourCount = s.val() ?? 0; renderHour(); }, dbError);
 }
 watchCurrentHour();
 setInterval(watchCurrentHour, 10000);
 
+// ---------- Log ----------
+let seenLogs = null;
 onValue(query(ref(db, 'logs'), orderByKey(), limitToLast(50)), snap => {
   const rows = [];
-  snap.forEach(c => { rows.push(c.val()); });
-  rows.reverse();   // neueste zuerst
+  snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
+  rows.reverse();
   const tb = $('logs');
   tb.replaceChildren();
   if (!rows.length) {
-    const tr = document.createElement('tr'); const td = document.createElement('td');
-    td.colSpan = 3; td.className = 'empty'; td.textContent = 'Noch keine Einträge'; tr.append(td); tb.append(tr);
+    const tr = el('tr'); const td = el('td', 'empty', 'Noch keine Einträge'); td.colSpan = 3; tr.append(td); tb.append(tr);
   }
   for (const l of rows) {
-    const tr = document.createElement('tr');
-    const t = document.createElement('td'); t.textContent = typeof l.ts === 'number' ? fmtTime(l.ts) : '…';
-    const n = document.createElement('td'); n.textContent = l.name;   // textContent = kein XSS
-    const st = document.createElement('td');
-    st.textContent = l.accepted ? '✅ gezählt' : '⛔ abgelehnt (Sperre)';
-    st.className = l.accepted ? 's-ok' : 's-bad';
-    tr.append(t, n, st); tb.append(tr);
+    const tr = el('tr', seenLogs && !seenLogs.has(l.key) ? 'new' : '');
+    const t = el('td', 'time');
+    if (typeof l.ts === 'number') t.append(el('span', 'date', fmtDate(l.ts) + ' · '), fmtClock(l.ts));
+    else t.textContent = '…';
+    const st = el('td');
+    st.append(el('span', 'chip ' + (l.accepted ? 'ok' : 'bad'), l.accepted ? '✓ gezählt' : '✕ abgelehnt'));
+    tr.append(t, el('td', 'who', l.name), st);   // textContent = kein XSS
+    tb.append(tr);
   }
+  seenLogs = new Set(rows.map(r => r.key));
 }, dbError);
 
 // ---------- Knopf ----------
 function remainingMs() {
   return lastMs == null ? 0 : Math.max(0, lastMs + COOLDOWN_MS - serverNow());
 }
+let lastLabel = '';
 function tick() {
   if (!loaded) return;
   const rem = remainingMs();
   btn.disabled = sending || rem > 0;
-  btn.textContent = rem > 0 ? (rem / 1000).toFixed(1) + ' s' : '+1';
+  ring.style.setProperty('--p', (1 - rem / COOLDOWN_MS).toFixed(3));
+  ring.classList.toggle('ready', rem === 0 && !sending);
+  const label = rem > 0 ? (rem / 1000).toFixed(1) + '|gesperrt' : '+1';
+  if (label !== lastLabel) {
+    lastLabel = label;
+    if (rem > 0) { btn.replaceChildren((rem / 1000).toFixed(1) + ' s', el('span', 'sub', 'gesperrt')); }
+    else btn.textContent = '+1';
+  }
 }
-setInterval(tick, 100);
+setInterval(tick, 50);
+
+function floatPlusOne() {
+  const f = el('div', 'float', '+1');
+  $('stage').append(f);
+  setTimeout(() => f.remove(), 950);
+}
 
 btn.addEventListener('click', async () => {
   const name = cleanName(nameInput.value);
@@ -204,14 +398,15 @@ btn.addEventListener('click', async () => {
     const h = Math.floor(serverNow() / HOUR_MS);
     const logKey = push(ref(db, 'logs')).key;
     await update(ref(db), {
-      state: { total: total + 1, last: serverTimestamp() },
+      state: { total: (total ?? 0) + 1, last: serverTimestamp() },
       ['hours/' + h]: (h === watchedHour ? thisHourCount : 0) + 1,
       ['logs/' + logKey]: { ts: serverTimestamp(), name, accepted: true },
     });
-    showMsg('ok', 'Gezählt! +1');
+    floatPlusOne();
+    showMsg('ok', 'Gezählt! Danke fürs Klicken 🎉');
   } catch (e) {
     if (isDenied(e)) {
-      showMsg('bad', 'Zu spät – jemand war schneller. Der Knopf ist noch kurz gesperrt.');
+      showMsg('bad', 'Zu spät – jemand war schneller.');
       push(ref(db, 'logs'), { ts: serverTimestamp(), name, accepted: false }).catch(console.error);
     } else {
       console.error(e);
