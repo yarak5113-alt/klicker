@@ -722,6 +722,7 @@ const VOICE_WINDOW_MS = (cfg.VOICE_DEDUPE_SECONDS ?? 8) * 1000;
 const voiceBtn = $('voice-btn'), voiceStatus = $('voice-status'), voiceHeard = $('voice-heard');
 const modeSel = $('voice-mode'), meterBar = $('voice-meter-bar');
 let rec = null, voiceOn = false, counted = [];
+let usePhrases = localStorage.getItem('klicker-no-phrases') !== '1';
 
 // Erkennung: Groß/klein, Satzzeichen und typische Hörfehler bei leiser/entfernter Stimme
 // werden toleriert ("ander Stelle", "an de Stelle", "an den Stellen", "and der Stelle" …).
@@ -834,9 +835,11 @@ function startVoice() {
   rec.interimResults = true;
   rec.maxAlternatives = 5;
   // Neuere Chrome-Versionen: Erkennung gezielt auf die Phrase trimmen (wird sonst ignoriert).
-  try {
-    if ('phrases' in rec && window.SpeechRecognitionPhrase) rec.phrases = [new SpeechRecognitionPhrase('an der Stelle', 10)];
-  } catch { /* nicht unterstützt */ }
+  if (usePhrases) {
+    try {
+      if ('phrases' in rec && window.SpeechRecognitionPhrase) rec.phrases = [new SpeechRecognitionPhrase('an der Stelle', 10)];
+    } catch { usePhrases = false; }
+  }
   counted = [];
   rec.onstart = () => setVoiceUi('listening', 'Hört zu … sag „an der Stelle“.');
   rec.onresult = ev => {
@@ -860,6 +863,10 @@ function startVoice() {
       voiceOn = false;
       stopMeter();
       setVoiceUi('error', 'Kein Mikrofon-Zugriff. Bitte im Browser erlauben.');
+    } else if (ev.error === 'phrases-not-supported') {
+      // Dieser Browser kann keine Phrasen-Hilfe → ohne sie neu starten (onend startet neu).
+      usePhrases = false;
+      localStorage.setItem('klicker-no-phrases', '1');
     } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
       setVoiceUi('error', 'Fehler: ' + ev.error + ' – starte neu …');
     }
