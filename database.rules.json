@@ -1,0 +1,31 @@
+{
+  "rules": {
+    "state": {
+      ".read": true,
+      ".write": "newData.exists()",
+      ".validate": "newData.hasChildren(['total', 'last']) && newData.child('total').val() === (data.exists() ? data.child('total').val() : 0) + 1 && newData.child('last').val() === now && (!data.exists() || now >= data.child('last').val() + 5000)",
+      "total": { ".validate": "newData.isNumber()" },
+      "last": { ".validate": "newData.isNumber()" },
+      "$other": { ".validate": false }
+    },
+    "hours": {
+      ".read": true,
+      ".indexOn": ".value",
+      "$h": {
+        ".write": "newData.exists()",
+        ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && $h.matches(/^[0-9]{6,7}$/) && newData.parent().parent().child('state/total').val() === (root.child('state/total').exists() ? root.child('state/total').val() : 0) + 1"
+      }
+    },
+    "logs": {
+      ".read": true,
+      "$id": {
+        ".write": "!data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['ts', 'name', 'accepted']) && newData.child('ts').val() === now && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 30 && newData.child('accepted').isBoolean() && (newData.child('accepted').val() === false || newData.parent().parent().child('state/total').val() === (root.child('state/total').exists() ? root.child('state/total').val() : 0) + 1)",
+        "ts": { ".validate": true },
+        "name": { ".validate": true },
+        "accepted": { ".validate": true },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

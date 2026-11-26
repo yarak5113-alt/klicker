@@ -1,10 +1,6 @@
-// Firebase-Konfiguration (Firebase Console → Projekteinstellungen → Meine Apps → Web-App → SDK-Konfiguration).
-// Diese Werte dürfen öffentlich sein: Was erlaubt ist, entscheiden die Regeln in firestore.rules.
+// Firebase Realtime Database. Die URL darf öffentlich sein:
+// Was erlaubt ist, entscheiden die Regeln in database.rules.json.
 window.FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  projectId: 'an-der-stelle',
+  databaseURL: 'https://an-der-stelle-default-rtdb.europe-west1.firebasedatabase.app',
 };
