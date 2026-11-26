@@ -244,17 +244,92 @@
     td.time .date { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ================= Kompaktes Layout: alles auf einen Bildschirm ================= */
+  html, body { height: 100%; }
+  main.app {
+    max-width: 1440px; height: 100vh; height: 100dvh; padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  main.app header { margin: 0; }
+  main.app .logo { width: 34px; height: 34px; border-radius: 10px; font-size: 15px; }
+  main.app h1 { font-size: 20px; }
+  main.app .pill { padding: 5px 10px; font-size: 12px; }
+  main.app .setup { margin: 0; }
+
+  .layout {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1.05fr 1fr 1.15fr; gap: 12px;
+  }
+  .layout > * { min-height: 0; }
+  .layout .card { margin: 0; padding: 14px 16px; border-radius: 18px; }
+  .layout h2 { margin-bottom: 8px; }
+
+  /* Links: Knopf */
+  .layout .hero { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .layout .total { font-size: clamp(44px, 8vh, 84px); }
+  .layout .total-label { margin: 2px 0 12px; font-size: 14px; }
+  .layout .last-click { margin: 0 auto 14px; font-size: 13px; padding: 4px 12px 4px 4px; }
+  .layout .lc-avatar { width: 26px; height: 26px; font-size: 12px; }
+  .layout .ring { width: clamp(150px, 32vh, 240px); height: clamp(150px, 32vh, 240px); padding: 8px; }
+  .layout button#click { font-size: clamp(28px, 5vh, 40px); border-width: 5px; }
+  .layout button#click:disabled { font-size: clamp(22px, 4vh, 30px); }
+  .layout .msg { margin-top: 12px; min-height: 20px; font-size: 14px; }
+  .layout .name { margin-top: 8px; padding: 4px 4px 4px 14px; }
+  .layout .name input { padding: 6px 8px; font-size: 14px; }
+
+  /* Mitte: Block, Rekorde, Sprache */
+  .mid { display: flex; flex-direction: column; gap: 12px; }
+  .mid .big { font-size: 34px; }
+  .mid .bar { margin-top: 10px; height: 6px; }
+  .mid .hint { margin-top: 6px; font-size: 12px; }
+  .records-card { flex: 1; min-height: 0; overflow: auto; }
+  .records-card ol.records { gap: 5px; }
+  .records-card ol.records li { padding: 6px 10px; border-radius: 10px; }
+  .records-card .medal { font-size: 17px; width: 24px; }
+  .records-card .rec-count { font-size: 15px; }
+  .records-card .rec-when { font-size: 12px; }
+
+  .layout .voice { text-align: left; }
+  .voice-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .voice-top h2 { margin: 0; }
+  .layout .voice-btn { padding: 7px 12px; font-size: 12px; }
+  .layout .voice-status { margin-top: 8px; font-size: 12px; }
+  .layout .voice-meter { width: 100%; margin: 8px 0 0; height: 5px; }
+  .layout .voice-mode { margin-top: 8px; font-size: 12px; }
+  .layout .voice-mode select { padding: 5px 8px; font-size: 12px; }
+  .layout .voice-heard { margin-top: 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Rechts: Log (scrollt nur in sich selbst) */
+  .log-card { display: flex; flex-direction: column; }
+  .log-card .table-wrap { flex: 1; min-height: 0; max-height: none; }
+  .log-card table { font-size: 13px; }
+  .log-card th { padding: 7px 8px; background: #141522; }
+  .log-card td { padding: 6px 8px; }
+  .log-card td.time .date { display: none; }
+  .log-card button.undo { width: 24px; height: 24px; font-size: 12px; margin-left: 6px; }
+
+  /* Tablet: 2 Spalten, Log unten */
+  @media (max-width: 1050px) {
+    .layout { grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, .8fr); }
+    .log-card { grid-column: 1 / -1; }
+  }
+  /* Handy: untereinander, so knapp wie möglich (hier lässt sich Scrollen nicht ganz vermeiden) */
+  @media (max-width: 680px) {
+    main.app { height: auto; padding: 10px; }
+    .layout { grid-template-columns: 1fr; grid-template-rows: none; }
+    .records-card { max-height: 220px; }
+    .log-card { height: 320px; }
+    .layout .ring { width: 190px; height: 190px; }
+  }
 </style>
 </head>
 <body>
-<main>
+<main class="app">
   <header>
     <div class="brand">
       <div class="logo">+1</div>
-      <div>
-        <h1>Klicker</h1>
-        <p class="tagline">Ein Zähler. Alle zusammen.</p>
-      </div>
+      <h1>Klicker</h1>
     </div>
     <div class="pills">
       <span class="pill">🔒 5 s Sperre für alle</span>
@@ -264,64 +339,67 @@
 
   <section class="card setup" id="setup" hidden></section>
 
-  <section class="card hero">
-    <div class="total" id="total">–</div>
-    <div class="total-label">Klicks insgesamt</div>
+  <div class="layout">
+    <section class="card hero">
+      <div class="total" id="total">–</div>
+      <div class="total-label">Klicks insgesamt</div>
 
-    <div class="last-click" id="last-click" hidden>
-      <span class="lc-avatar" id="lc-avatar"></span>
-      <span class="lc-text">Letzter Klick von <b id="lc-name"></b><span class="lc-when" id="lc-when"></span></span>
-    </div>
-
-    <div class="stage" id="stage">
-      <div class="ring" id="ring">
-        <button id="click" disabled>+1</button>
+      <div class="last-click" id="last-click" hidden>
+        <span class="lc-avatar" id="lc-avatar"></span>
+        <span class="lc-text">Letzter Klick von <b id="lc-name"></b><span class="lc-when" id="lc-when"></span></span>
       </div>
+
+      <div class="stage" id="stage">
+        <div class="ring" id="ring">
+          <button id="click" disabled>+1</button>
+        </div>
+      </div>
+
+      <div class="msg" id="msg"></div>
+      <label class="name"><span>Dein Name</span><input id="name" maxlength="30" placeholder="Anonym" autocomplete="nickname"></label>
+    </section>
+
+    <div class="mid">
+      <section class="card">
+        <h2 id="block-title">Aktueller Block</h2>
+        <div class="big" id="this-hour">–</div>
+        <div class="bar"><i id="hour-bar"></i></div>
+        <div class="hint" id="hour-hint"></div>
+      </section>
+
+      <section class="card records-card">
+        <h2>🏆 Rekorde pro Block</h2>
+        <ol class="records" id="records"><li class="empty">Noch keine Klicks</li></ol>
+      </section>
+
+      <section class="card voice">
+        <div class="voice-top">
+          <h2>🎤 Automatisch zählen</h2>
+          <button class="voice-btn" id="voice-btn">🎤 Spracherkennung an</button>
+        </div>
+        <div class="voice-status off" id="voice-status"></div>
+        <div class="voice-meter" title="Mikrofon-Pegel"><i id="voice-meter-bar"></i></div>
+        <label class="voice-mode">Erkennung:
+          <select id="voice-mode">
+            <option value="streng">Streng – nur exakt</option>
+            <option value="normal">Normal – kleine Hörfehler</option>
+            <option value="locker">Locker – große Entfernung</option>
+          </select>
+        </label>
+        <div class="voice-heard" id="voice-heard"></div>
+      </section>
     </div>
 
-    <div class="msg" id="msg"></div>
-    <label class="name"><span>Dein Name</span><input id="name" maxlength="30" placeholder="Anonym" autocomplete="nickname"></label>
-  </section>
-
-  <section class="card voice">
-    <h2>🎤 Automatisch zählen</h2>
-    <button class="voice-btn" id="voice-btn">🎤 Spracherkennung an</button>
-    <div class="voice-status off" id="voice-status"></div>
-    <div class="voice-meter" title="Mikrofon-Pegel"><i id="voice-meter-bar"></i></div>
-    <label class="voice-mode">Erkennung:
-      <select id="voice-mode">
-        <option value="streng">Streng – nur exakt „an der Stelle“</option>
-        <option value="normal">Normal – kleine Hörfehler erlaubt</option>
-        <option value="locker">Locker – für große Entfernung</option>
-      </select>
-    </label>
-    <div class="voice-heard" id="voice-heard"></div>
-  </section>
-
-  <div class="grid">
-    <section class="card">
-      <h2 id="block-title">Aktueller Block</h2>
-      <div class="big" id="this-hour">–</div>
-      <div class="bar"><i id="hour-bar"></i></div>
-      <div class="hint" id="hour-hint"></div>
-    </section>
-    <section class="card">
-      <h2>🏆 Rekorde pro Block</h2>
-      <ol class="records" id="records"><li class="empty">Noch keine Klicks</li></ol>
+    <section class="card log-card">
+      <div class="log-head"><h2>Log</h2><h2>Letzte 50</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Zeit</th><th>Name</th><th>Status</th></tr></thead>
+          <tbody id="logs"><tr><td colspan="3" class="empty">Noch keine Einträge</td></tr></tbody>
+        </table>
+      </div>
     </section>
   </div>
-
-  <section class="card">
-    <div class="log-head"><h2>Log</h2><h2>Letzte 50 Versuche</h2></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Zeit</th><th>Name</th><th>Status</th></tr></thead>
-        <tbody id="logs"><tr><td colspan="3" class="empty">Noch keine Einträge</td></tr></tbody>
-      </table>
-    </div>
-  </section>
-
-  <footer>Nach jedem gezählten Klick ist der Knopf für alle 5 Sekunden gesperrt. Wer zu spät drückt, landet als „abgelehnt“ im Log.</footer>
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite">
