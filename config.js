@@ -11,4 +11,8 @@ window.FIREBASE_CONFIG = {
     { start: '09:45', end: '11:15' },
     { start: '11:30', end: '13:00' },
   ],
+
+  // Seltenes Bild: Datei im Repo (z. B. 'lustig.jpg' hochladen und hier eintragen) und Chance pro Klick.
+  FUNNY_IMAGE: 'lustig.svg',
+  FUNNY_CHANCE: 0.01,   // 0.01 = 1 zu 100
 };

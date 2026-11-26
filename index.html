@@ -177,6 +177,47 @@
 
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; opacity: .7; }
 
+  /* ---------- Spracherkennung ---------- */
+  .card.voice { margin-top: 16px; }
+  .voice-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .voice h2 { margin-bottom: 6px; }
+  .voice-status { font-size: 14px; color: var(--muted); }
+  .voice-status.listening { color: var(--ok); }
+  .voice-status.listening::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-right: 8px; animation: ping 1.2s infinite; vertical-align: middle; }
+  .voice-status.error { color: var(--bad); }
+  .voice-btn {
+    border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--text);
+    font: 700 14px Inter, system-ui, sans-serif; padding: 12px 18px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .voice-btn:hover:not(:disabled) { background: rgba(255,255,255,.1); }
+  .voice-btn.on { background: rgba(251,113,133,.15); border-color: rgba(251,113,133,.5); color: #fecdd3; }
+  .voice-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .voice-heard { color: var(--muted); font-size: 13px; margin-top: 10px; font-style: italic; min-height: 1em; }
+
+  /* ---------- Spruch-Toast ---------- */
+  .toast {
+    position: fixed; left: 50%; top: 18px; z-index: 50; width: min(92vw, 460px);
+    transform: translate(-50%, -140%); opacity: 0; pointer-events: none;
+    padding: 16px 20px; border-radius: 18px; text-align: center;
+    background: linear-gradient(135deg, rgba(124,92,255,.95), rgba(63,169,255,.95));
+    box-shadow: 0 18px 50px rgba(0,0,0,.45); transition: transform .45s cubic-bezier(.2,1.4,.4,1), opacity .3s;
+  }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; }
+  .toast-nr { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
+  .toast-text { font-size: 18px; font-weight: 800; margin-top: 4px; }
+
+  /* ---------- Seltenes Bild ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px;
+    background: rgba(5,6,12,.8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: pointer;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay-box { text-align: center; animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform: scale(.3) rotate(-12deg); opacity: 0; } }
+  .overlay-badge { display: inline-block; padding: 8px 16px; border-radius: 999px; background: var(--gold); color: #1a1300; font-weight: 800; margin-bottom: 14px; }
+  .overlay img { display: block; max-width: min(88vw, 520px); max-height: 65vh; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.6); margin: 0 auto; }
+  .overlay-hint { color: var(--muted); font-size: 13px; margin-top: 12px; }
+
   @media (max-width: 640px) {
     main { padding-top: 24px; }
     .grid { grid-template-columns: 1fr; }
@@ -224,6 +265,17 @@
     <label class="name"><span>Dein Name</span><input id="name" maxlength="30" placeholder="Anonym" autocomplete="nickname"></label>
   </section>
 
+  <section class="card voice">
+    <div class="voice-row">
+      <div>
+        <h2>🎤 Automatisch zählen</h2>
+        <div class="voice-status off" id="voice-status"></div>
+      </div>
+      <button class="voice-btn" id="voice-btn">🎤 Spracherkennung an</button>
+    </div>
+    <div class="voice-heard" id="voice-heard"></div>
+  </section>
+
   <div class="grid">
     <section class="card">
       <h2 id="block-title">Aktueller Block</h2>
@@ -249,6 +301,19 @@
 
   <footer>Nach jedem gezählten Klick ist der Knopf für alle 5 Sekunden gesperrt. Wer zu spät drückt, landet als „abgelehnt“ im Log.</footer>
 </main>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <div class="toast-nr" id="toast-nr"></div>
+  <div class="toast-text" id="toast-text"></div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="overlay-box">
+    <div class="overlay-badge">🍀 Seltenes Bild! (1 zu 100)</div>
+    <img id="overlay-img" alt="Lustiges Bild">
+    <div class="overlay-hint">Tippen zum Schließen</div>
+  </div>
+</div>
 
 <script src="config.js"></script>
 <script type="module">
@@ -305,6 +370,7 @@ onValue(ref(db, 'state'), snap => {
   if (total !== null && newTotal > total) {
     const t = $('total'); t.classList.add('bump'); setTimeout(() => t.classList.remove('bump'), 220);
   }
+  if (total !== null && newTotal > total && newTotal % 3 === 0) showSpruch(newTotal);
   total = newTotal;
   lastMs = d?.last ?? null;
   $('total').textContent = de(total);
@@ -472,20 +538,71 @@ function floatPlusOne() {
   setTimeout(() => f.remove(), 950);
 }
 
-btn.addEventListener('click', async () => {
-  const name = cleanName(nameInput.value);
+// ---------- Sprüche (alle 3 Klicks) ----------
+const SPRUECHE = [
+  'An der Stelle: Respekt. 👏',
+  'Statistisch gesehen ist das hier die Stelle.',
+  'Wieder eine Stelle gefunden. Die Archäologen sind neidisch.',
+  'Breaking News: Es gibt noch Stellen, an denen nichts gesagt wurde.',
+  'An der Stelle wäre eine Pause auch mal schön.',
+  'Wenn jede Stelle einen Euro bringen würde … 💸',
+  'Diese Stelle wurde soeben offiziell markiert. 📍',
+  'Achtung, Stellen-Alarm! 🚨',
+  'An der Stelle möchte ich mich bei allen Stellen bedanken.',
+  'Neue Stelle entdeckt. Google Maps wird aktualisiert.',
+  'Wieder drei Stellen weiter. Wir kommen voran!',
+  'An der Stelle sei gesagt: Das war eine Stelle.',
+  'Stellen-Zähler läuft heiß 🔥',
+  'Die Stelle ist jetzt besetzt. Bewerbungen bitte an anderer Stelle.',
+  'Das ist nicht irgendeine Stelle. Das ist DIE Stelle.',
+  'Fun Fact: Keiner weiß, wo die Stelle eigentlich ist.',
+  'Hier könnte Ihre Stelle stehen.',
+  'Stelle um Stelle zum Weltrekord! 🏆',
+  'Wir unterbrechen kurz für eine weitere Stelle.',
+  'An der Stelle: kurz durchatmen. Und weiterklicken.',
+];
+let lastSpruch = -1, toastTimer = null;
+function showSpruch(nr) {
+  let i;
+  do { i = Math.floor(Math.random() * SPRUECHE.length); } while (SPRUECHE.length > 1 && i === lastSpruch);
+  lastSpruch = i;
+  const t = $('toast');
+  $('toast-nr').textContent = `Klick Nr. ${de(nr)}`;
+  $('toast-text').textContent = SPRUECHE[i];
+  t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4500);
+}
+
+// ---------- Seltenes Bild (1 zu 100) ----------
+const FUNNY_IMAGE = cfg.FUNNY_IMAGE || 'lustig.svg';
+const FUNNY_CHANCE = cfg.FUNNY_CHANCE ?? 0.01;
+let overlayTimer = null;
+function showFunnyImage() {
+  const o = $('overlay');
+  $('overlay-img').src = FUNNY_IMAGE;
+  o.hidden = false;
+  clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(() => { o.hidden = true; }, 6000);
+}
+$('overlay').addEventListener('click', () => { $('overlay').hidden = true; });
+
+// ---------- Klicken ----------
+async function doClick(source) {
+  if (sending || !loaded || remainingMs() > 0) return false;
+  let name = cleanName(nameInput.value);
+  if (source === 'voice') name = name.slice(0, 27) + ' 🎤';
   sending = true; tick();
   try {
-    // Zähler, Stunde und Log in EINEM atomaren Schreibvorgang. Die Regeln lehnen ihn ab,
-    // wenn seit dem letzten Klick weniger als 5 s (Serverzeit) vergangen sind oder
-    // jemand anderes gerade schneller war (dann stimmt "total + 1" nicht mehr).
     const logKey = push(ref(db, 'logs')).key;
     await update(ref(db), {
       state: { total: (total ?? 0) + 1, last: serverTimestamp() },
       ['logs/' + logKey]: { ts: serverTimestamp(), name, accepted: true },
     });
     floatPlusOne();
-    showMsg('ok', 'Gezählt! Danke fürs Klicken 🎉');
+    showMsg('ok', source === 'voice' ? '🎤 „An der Stelle“ erkannt – gezählt!' : 'Gezählt! Danke fürs Klicken 🎉');
+    if (Math.random() < FUNNY_CHANCE) showFunnyImage();
+    return true;
   } catch (e) {
     if (isDenied(e)) {
       showMsg('bad', 'Zu spät – jemand war schneller.');
@@ -494,10 +611,73 @@ btn.addEventListener('click', async () => {
       console.error(e);
       showMsg('bad', 'Verbindung fehlgeschlagen.');
     }
+    return false;
   } finally {
     sending = false; tick();
   }
-});
+}
+btn.addEventListener('click', () => doClick('button'));
+
+// ---------- Spracherkennung „an der Stelle“ ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const PHRASE = /an\s+der\s+stelle/gi;
+const voiceBtn = $('voice-btn'), voiceStatus = $('voice-status'), voiceHeard = $('voice-heard');
+let rec = null, voiceOn = false, counted = [];
+
+function setVoiceUi(state, text) {
+  voiceBtn.classList.toggle('on', voiceOn);
+  voiceBtn.textContent = voiceOn ? '⏹ Spracherkennung aus' : '🎤 Spracherkennung an';
+  voiceStatus.className = 'voice-status ' + state;
+  voiceStatus.textContent = text;
+}
+
+if (!SR) {
+  voiceBtn.disabled = true;
+  setVoiceUi('off', 'Dein Browser kann keine Spracherkennung. Bitte Chrome oder Edge benutzen.');
+} else {
+  setVoiceUi('off', 'Aus. Wenn an, wird jedes „an der Stelle“ automatisch gezählt.');
+  voiceBtn.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    if (voiceOn) startVoice();
+    else { rec && rec.stop(); setVoiceUi('off', 'Aus.'); }
+  });
+}
+
+function startVoice() {
+  rec = new SR();
+  rec.lang = 'de-DE';
+  rec.continuous = true;
+  rec.interimResults = true;
+  counted = [];
+  rec.onstart = () => setVoiceUi('listening', 'Hört zu … sag „an der Stelle“.');
+  rec.onresult = ev => {
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const text = ev.results[i][0].transcript;
+      const hits = (text.match(PHRASE) || []).length;
+      if (hits > (counted[i] || 0)) {
+        counted[i] = hits;
+        voiceHeard.textContent = `Gehört: „${text.trim()}“`;
+        doClick('voice').then(ok => {
+          if (!ok && remainingMs() > 0) setVoiceUi('listening', 'Erkannt, aber der Knopf ist gerade gesperrt.');
+        });
+      } else if (ev.results[i].isFinal) {
+        voiceHeard.textContent = `Gehört: „${text.trim()}“`;
+      }
+    }
+  };
+  rec.onerror = ev => {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+      voiceOn = false;
+      setVoiceUi('error', 'Kein Mikrofon-Zugriff. Bitte im Browser erlauben.');
+    } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
+      setVoiceUi('error', 'Fehler: ' + ev.error);
+    }
+  };
+  // Chrome beendet die Erkennung regelmäßig von selbst – dann neu starten.
+  rec.onend = () => { if (voiceOn) setTimeout(() => { if (voiceOn) startVoice(); }, 300); };
+  try { rec.start(); } catch (e) { console.error(e); }
+}
+
 </script>
 </body>
 </html>
