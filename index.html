@@ -604,7 +604,10 @@ async function doClick(source) {
     if (Math.random() < FUNNY_CHANCE) showFunnyImage();
     return true;
   } catch (e) {
-    if (isDenied(e)) {
+    if (isDenied(e) && source === 'voice') {
+      // Ein anderes Gerät hat denselben Satz zuerst erkannt → nicht doppelt zählen, nichts loggen.
+      setVoiceUi('listening', 'Schon von einem anderen Gerät gezählt – nicht doppelt.');
+    } else if (isDenied(e)) {
       showMsg('bad', 'Zu spät – jemand war schneller.');
       push(ref(db, 'logs'), { ts: serverTimestamp(), name, accepted: false }).catch(console.error);
     } else {
@@ -621,6 +624,8 @@ btn.addEventListener('click', () => doClick('button'));
 // ---------- Spracherkennung „an der Stelle“ ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const PHRASE = /an\s+der\s+stelle/gi;
+// Zeitfenster, in dem ein erkannter Satz als "derselbe" gilt wie der zuletzt gezählte Klick.
+const VOICE_WINDOW_MS = (cfg.VOICE_DEDUPE_SECONDS ?? 8) * 1000;
 const voiceBtn = $('voice-btn'), voiceStatus = $('voice-status'), voiceHeard = $('voice-heard');
 let rec = null, voiceOn = false, counted = [];
 
@@ -657,9 +662,14 @@ function startVoice() {
       if (hits > (counted[i] || 0)) {
         counted[i] = hits;
         voiceHeard.textContent = `Gehört: „${text.trim()}“`;
-        doClick('voice').then(ok => {
-          if (!ok && remainingMs() > 0) setVoiceUi('listening', 'Erkannt, aber der Knopf ist gerade gesperrt.');
-        });
+        // Wurde gerade schon gezählt (von einem anderen Gerät oder per Knopf), ist das
+        // derselbe Satz, nur später erkannt → ignorieren.
+        const since = lastMs == null ? Infinity : serverNow() - lastMs;
+        if (since < VOICE_WINDOW_MS) {
+          setVoiceUi('listening', `Schon gezählt (vor ${(since / 1000).toFixed(1)} s) – nicht doppelt.`);
+          continue;
+        }
+        doClick('voice');
       } else if (ev.results[i].isFinal) {
         voiceHeard.textContent = `Gehört: „${text.trim()}“`;
       }

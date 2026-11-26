@@ -15,4 +15,8 @@ window.FIREBASE_CONFIG = {
   // Seltenes Bild: Datei im Repo (z. B. 'lustig.jpg' hochladen und hier eintragen) und Chance pro Klick.
   FUNNY_IMAGE: 'lustig.svg',
   FUNNY_CHANCE: 0.01,   // 0.01 = 1 zu 100
+
+  // Spracherkennung: Hören mehrere Geräte denselben Satz, zählt nur das erste.
+  // Innerhalb dieser Sekunden nach einem gezählten Klick wird "an der Stelle" ignoriert.
+  VOICE_DEDUPE_SECONDS: 8,
 };
