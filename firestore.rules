@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Klicker – Firestore-Sicherheitsregeln
+// Firebase Console → Firestore Database → Regeln → alles ersetzen → Veröffentlichen.
+//
+// Die Regeln sind die "Wahrheit": Ein Klick wird nur angenommen, wenn seit dem
+// letzten gezählten Klick mindestens 5 Sekunden (Serverzeit) vergangen sind.
+// Drücken mehrere gleichzeitig, gewinnt der erste, alle anderen werden abgelehnt.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function statePath() { return /databases/$(database)/documents/klicker/state; }
+    function totalBefore() { return exists(statePath()) ? get(statePath()).data.total : 0; }
+    // true, wenn im selben Schreibvorgang der Zähler genau um 1 erhöht wird
+    function clickAccepted() { return getAfter(statePath()).data.total == totalBefore() + 1; }
+    function hourNow() { return math.floor(request.time.toMillis() / 3600000); }
+
+    // Gesamtzähler + Zeitpunkt des letzten gezählten Klicks
+    match /klicker/state {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['total', 'last'])
+        && request.resource.data.total == 1
+        && request.resource.data.last == request.time;
+      allow update: if request.resource.data.keys().hasOnly(['total', 'last'])
+        && request.resource.data.total == resource.data.total + 1
+        && request.resource.data.last == request.time
+        && request.time >= resource.data.last + duration.value(5, 's');
+    }
+
+    // Klicks pro Stunde (Dokument-ID = Stunden seit 1970, UTC)
+    match /hours/{h} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count == (resource == null ? 0 : resource.data.count) + 1
+        && int(h) >= hourNow() - 1 && int(h) <= hourNow() + 1
+        && clickAccepted();
+    }
+
+    // Log aller Versuche
+    match /logs/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['ts', 'name', 'accepted'])
+        && request.resource.data.ts == request.time
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 30
+        && request.resource.data.accepted is bool
+        && (request.resource.data.accepted == false || clickAccepted());
+    }
+  }
+}

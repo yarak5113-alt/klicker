@@ -44,10 +44,10 @@
 <body>
 <main>
   <h1>Klicker</h1>
-  <p class="sub">Ein Zähler für alle. Nach jedem Klick ist der Knopf für <b id="cd-sec">5</b> Sekunden für <b>alle</b> gesperrt.</p>
+  <p class="sub">Ein Zähler für alle. Nach jedem Klick ist der Knopf für <b>5</b> Sekunden für <b>alle</b> gesperrt.</p>
 
   <section class="card setup" id="setup" hidden>
-    <b>Noch nicht eingerichtet.</b> Trage in <code>config.js</code> die Supabase-URL und den Key ein (siehe README).
+    <b>Noch nicht eingerichtet.</b> Trage in <code>config.js</code> die Firebase-Konfiguration ein (siehe README).
   </section>
 
   <section class="card hero">
@@ -78,82 +78,102 @@
   </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {
+  getFirestore, doc, collection, query, orderBy, limit, onSnapshot,
+  runTransaction, addDoc, serverTimestamp,
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const COOLDOWN_MS = 5000, HOUR_MS = 3600000;
 const $ = id => document.getElementById(id);
 const btn = $('click'), msg = $('msg'), nameInput = $('name');
-let state = null, clockOffset = 0, sending = false;
 
 nameInput.value = localStorage.getItem('klicker-name') || '';
 nameInput.addEventListener('input', () => localStorage.setItem('klicker-name', nameInput.value));
 
-const cfg = window.KLICKER_CONFIG || {};
-if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
+const cfg = window.FIREBASE_CONFIG || {};
+if (!cfg.projectId || !cfg.apiKey) {
   $('setup').hidden = false;
-  throw new Error('Supabase nicht konfiguriert');
+  throw new Error('Firebase nicht konfiguriert');
 }
-const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+const db = getFirestore(initializeApp(cfg));
+const stateRef = doc(db, 'klicker', 'state');
+
+let loaded = false, lastMs = null, sending = false;
 
 const fmtTime = ts => new Date(ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
 const fmtHour = ts => {
-  const a = new Date(ts), b = new Date(ts + 3600000);
+  const a = new Date(ts), b = new Date(ts + HOUR_MS);
   const d = a.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
   const h = x => x.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
   return `${d}, ${h(a)}–${h(b)} Uhr`;
 };
+const cleanName = s => s.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 30) || 'Anonym';
+const showMsg = (cls, text) => { msg.className = 'msg ' + cls; msg.textContent = text; };
+const dbError = e => { console.error(e); showMsg('bad', 'Datenbank nicht erreichbar.'); };
 
-function render(s) {
-  state = s;
-  clockOffset = s.serverNow - Date.now();
-  $('cd-sec').textContent = Math.round(s.cooldownMs / 1000);
-  $('total').textContent = Number(s.total).toLocaleString('de-DE');
-  $('this-hour').textContent = Number(s.thisHour).toLocaleString('de-DE');
+// ---------- Live-Daten ----------
+onSnapshot(stateRef, snap => {
+  const d = snap.data({ serverTimestamps: 'estimate' });
+  $('total').textContent = (d?.total ?? 0).toLocaleString('de-DE');
+  lastMs = d?.last ? d.last.toMillis() : null;
+  loaded = true;
+  tick();
+}, dbError);
 
+onSnapshot(query(collection(db, 'hours'), orderBy('count', 'desc'), limit(5)), snap => {
   const rec = $('records');
   rec.replaceChildren();
-  if (!s.records.length) {
+  if (snap.empty) {
     const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Noch keine Klicks'; rec.append(li);
   }
-  for (const r of s.records) {
+  for (const d of snap.docs) {
     const li = document.createElement('li');
-    li.textContent = `${Number(r.count).toLocaleString('de-DE')} Klicks – ${fmtHour(r.hourStart)}`;
+    li.textContent = `${d.data().count.toLocaleString('de-DE')} Klicks – ${fmtHour(Number(d.id) * HOUR_MS)}`;
     rec.append(li);
   }
+}, dbError);
 
+let hourUnsub = null, watchedHour = null;
+function watchCurrentHour() {
+  const h = Math.floor(Date.now() / HOUR_MS);
+  if (h === watchedHour) return;
+  watchedHour = h;
+  if (hourUnsub) hourUnsub();
+  hourUnsub = onSnapshot(doc(db, 'hours', String(h)), s => {
+    $('this-hour').textContent = (s.data()?.count ?? 0).toLocaleString('de-DE');
+  }, dbError);
+}
+watchCurrentHour();
+setInterval(watchCurrentHour, 10000);
+
+onSnapshot(query(collection(db, 'logs'), orderBy('ts', 'desc'), limit(50)), snap => {
   const tb = $('logs');
   tb.replaceChildren();
-  if (!s.logs.length) {
+  if (snap.empty) {
     const tr = document.createElement('tr'); const td = document.createElement('td');
     td.colSpan = 3; td.className = 'empty'; td.textContent = 'Noch keine Einträge'; tr.append(td); tb.append(tr);
   }
-  for (const l of s.logs) {
+  for (const d of snap.docs) {
+    const l = d.data({ serverTimestamps: 'estimate' });
     const tr = document.createElement('tr');
-    const t = document.createElement('td'); t.textContent = fmtTime(l.ts);
+    const t = document.createElement('td'); t.textContent = l.ts ? fmtTime(l.ts.toMillis()) : '…';
     const n = document.createElement('td'); n.textContent = l.name;   // textContent = kein XSS
     const st = document.createElement('td');
     st.textContent = l.accepted ? '✅ gezählt' : '⛔ abgelehnt (Sperre)';
     st.className = l.accepted ? 's-ok' : 's-bad';
     tr.append(t, n, st); tb.append(tr);
   }
-  tick();
-}
+}, dbError);
 
-async function refresh() {
-  const { data, error } = await sb.rpc('get_state');
-  if (error) { console.error(error); msg.className = 'msg bad'; msg.textContent = 'Datenbank nicht erreichbar.'; return; }
-  render(data);
-}
-let refreshTimer = null;
-const refreshSoon = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 150); };
-
+// ---------- Knopf ----------
 function remainingMs() {
-  if (!state || state.lastAcceptedTs == null) return 0;
-  return Math.max(0, state.lastAcceptedTs + state.cooldownMs - (Date.now() + clockOffset));
+  return lastMs == null ? 0 : Math.max(0, lastMs + COOLDOWN_MS - Date.now());
 }
-
 function tick() {
-  if (!state) return;
+  if (!loaded) return;
   const rem = remainingMs();
   btn.disabled = sending || rem > 0;
   btn.textContent = rem > 0 ? (rem / 1000).toFixed(1) + ' s' : '+1';
@@ -161,27 +181,32 @@ function tick() {
 setInterval(tick, 100);
 
 btn.addEventListener('click', async () => {
+  const name = cleanName(nameInput.value);
   sending = true; tick();
   try {
-    const { data: r, error } = await sb.rpc('click', { p_name: nameInput.value });
-    if (error) throw error;
-    if (r.ok) { msg.className = 'msg ok'; msg.textContent = 'Gezählt! +1'; }
-    else { msg.className = 'msg bad'; msg.textContent = `Zu spät – jemand war schneller. Noch ${(r.retryInMs / 1000).toFixed(1)} s gesperrt.`; }
+    // Zähler, Stunde und Log in EINEM Schreibvorgang. Die Firestore-Regeln
+    // lehnen ihn ab, wenn seit dem letzten Klick weniger als 5 s vergangen sind.
+    await runTransaction(db, async tx => {
+      const hourRef = doc(db, 'hours', String(Math.floor(Date.now() / HOUR_MS)));
+      const state = await tx.get(stateRef);
+      const hour = await tx.get(hourRef);
+      tx.set(stateRef, { total: (state.data()?.total ?? 0) + 1, last: serverTimestamp() });
+      tx.set(hourRef, { count: (hour.data()?.count ?? 0) + 1 });
+      tx.set(doc(collection(db, 'logs')), { ts: serverTimestamp(), name, accepted: true });
+    });
+    showMsg('ok', 'Gezählt! +1');
   } catch (e) {
-    console.error(e);
-    msg.className = 'msg bad'; msg.textContent = 'Verbindung fehlgeschlagen.';
+    if (e.code === 'permission-denied') {
+      showMsg('bad', 'Zu spät – jemand war schneller. Der Knopf ist noch kurz gesperrt.');
+      addDoc(collection(db, 'logs'), { ts: serverTimestamp(), name, accepted: false }).catch(console.error);
+    } else {
+      console.error(e);
+      showMsg('bad', 'Verbindung fehlgeschlagen.');
+    }
   } finally {
-    sending = false;
-    await refresh();
+    sending = false; tick();
   }
 });
-
-// Live: bei jedem neuen Klick (egal von wem) neu laden. Zusätzlich alle 15 s als Absicherung.
-sb.channel('klicks')
-  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clicks' }, refreshSoon)
-  .subscribe();
-setInterval(refresh, 15000);
-refresh();
 </script>
 </body>
 </html>

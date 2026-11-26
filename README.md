@@ -6,26 +6,29 @@ Ein gemeinsamer Klick-Zähler im Browser. Man muss nichts herunterladen: Link ö
 
 ## Funktionen
 
-- **Online-Datenbank (Supabase):** Die Klicks werden dauerhaft gespeichert und sind für alle gleich.
+- **Online-Datenbank (Firebase Firestore):** Die Klicks werden dauerhaft gespeichert und sind für alle gleich.
 - **Live:** Neue Klicks erscheinen sofort bei allen, die die Seite offen haben.
-- **Globale Sperre:** Nach einem gezählten Klick ist der Knopf **5 Sekunden für alle** gesperrt. Drücken drei Leute innerhalb von 5 Sekunden, zählt nur der erste Klick. Die Prüfung läuft in der Datenbank mit einer Sperre (`pg_advisory_xact_lock`), dadurch kann nie mehr als ein Klick durchkommen.
+- **Globale Sperre:** Nach einem gezählten Klick ist der Knopf **5 Sekunden für alle** gesperrt. Drücken drei Leute innerhalb von 5 Sekunden, zählt nur der erste Klick. Das prüfen die Firestore-Sicherheitsregeln mit der Serverzeit, man kann es also auch nicht durch Tricks im Browser umgehen.
 - **Rekorde pro Stunde:** Die 5 Stunden mit den meisten Klicks plus der Zähler der aktuellen Stunde.
 - **Log:** Unten auf der Seite stehen die letzten 50 Versuche mit Zeit, Name und Status (gezählt / abgelehnt).
 
-## Einrichtung (einmalig, ca. 5 Minuten)
+## Einrichtung (einmalig, ca. 5 Minuten, kostenlos)
 
-1. Auf <https://supabase.com> kostenlos anmelden und **New project** erstellen.
-2. Im Projekt links **SQL Editor** öffnen, den Inhalt von [`supabase.sql`](supabase.sql) einfügen und **Run** drücken.
-3. Unter **Project Settings → API** die **Project URL** und den **anon / publishable key** kopieren.
-4. Beide Werte in [`config.js`](config.js) eintragen und auf GitHub speichern (committen).
-5. Nach etwa einer Minute ist die Seite unter dem Link oben fertig.
+1. Auf <https://console.firebase.google.com> mit einem Google-Konto anmelden und **Projekt hinzufügen**. Google Analytics kannst du ausschalten.
+2. Links **Build → Firestore Database → Datenbank erstellen**. Standort z. B. `eur3 (Europe)`, Modus **Produktion**.
+3. Oben den Reiter **Regeln** öffnen, alles durch den Inhalt von [`firestore.rules`](firestore.rules) ersetzen und **Veröffentlichen**.
+4. Zahnrad oben links → **Projekteinstellungen** → unten bei „Meine Apps“ auf das **Web-Symbol `</>`** klicken, einen Namen eingeben und registrieren (Hosting nicht ankreuzen).
+5. Die angezeigten Werte (`apiKey`, `authDomain`, `projectId`, …) in [`config.js`](config.js) eintragen und auf GitHub speichern.
+6. Nach etwa einer Minute ist die Seite unter dem Link oben fertig.
 
-Der anon-Key darf öffentlich sein: Die Datenbank erlaubt nur Lesen und Klicken über die Funktion `click()`. Direktes Ändern oder Löschen ist gesperrt.
+Die Firebase-Konfiguration darf öffentlich sein. Was gelesen und geschrieben werden darf, entscheiden allein die Regeln.
+
+**Gratis-Limit:** Firestore erlaubt im kostenlosen Tarif 50.000 Lesevorgänge und 20.000 Schreibvorgänge pro Tag. Für eine Gruppe von Freunden reicht das locker.
 
 ## Dateien
 
-| Datei          | Inhalt                                                |
-|----------------|-------------------------------------------------------|
-| `index.html`   | Die Webseite (läuft auf GitHub Pages)                 |
-| `config.js`    | Supabase-URL und Key                                  |
-| `supabase.sql` | Tabelle, Sperre, Rekorde und Rechte für die Datenbank |
+| Datei             | Inhalt                                            |
+|-------------------|---------------------------------------------------|
+| `index.html`      | Die Webseite (läuft auf GitHub Pages)             |
+| `config.js`       | Firebase-Konfiguration                            |
+| `firestore.rules` | Sicherheitsregeln mit der 5-Sekunden-Sperre       |

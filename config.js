@@ -1,7 +1,10 @@
-// Supabase-Zugangsdaten (Dashboard → Project Settings → API).
-// Der "anon"/"publishable" Key darf öffentlich sein: Schreiben ist in der
-// Datenbank nur über die Funktion click() erlaubt (siehe supabase.sql).
-window.KLICKER_CONFIG = {
-  SUPABASE_URL: '',       // z. B. 'https://abcdefgh.supabase.co'
-  SUPABASE_ANON_KEY: '',  // z. B. 'eyJhbGciOi...' oder 'sb_publishable_...'
+// Firebase-Konfiguration (Firebase Console → Projekteinstellungen → Meine Apps → Web-App → SDK-Konfiguration).
+// Diese Werte dürfen öffentlich sein: Was erlaubt ist, entscheiden die Regeln in firestore.rules.
+window.FIREBASE_CONFIG = {
+  apiKey: '',
+  authDomain: '',
+  projectId: '',
+  storageBucket: '',
+  messagingSenderId: '',
+  appId: '',
 };
