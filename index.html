@@ -36,6 +36,8 @@
   th { color: var(--muted); font-weight: 600; }
   .s-ok { color: var(--ok); } .s-bad { color: var(--bad); }
   .empty { color: var(--muted); }
+  .setup { border: 1px solid #ffb84d; color: #ffd28a; }
+  .setup code { background:#0f1115; padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -43,6 +45,10 @@
 <main>
   <h1>Klicker</h1>
   <p class="sub">Ein Zähler für alle. Nach jedem Klick ist der Knopf für <b id="cd-sec">5</b> Sekunden für <b>alle</b> gesperrt.</p>
+
+  <section class="card setup" id="setup" hidden>
+    <b>Noch nicht eingerichtet.</b> Trage in <code>config.js</code> die Supabase-URL und den Key ein (siehe README).
+  </section>
 
   <section class="card hero">
     <div class="count" id="total">–</div>
@@ -72,6 +78,8 @@
   </section>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const btn = $('click'), msg = $('msg'), nameInput = $('name');
@@ -79,6 +87,13 @@ let state = null, clockOffset = 0, sending = false;
 
 nameInput.value = localStorage.getItem('klicker-name') || '';
 nameInput.addEventListener('input', () => localStorage.setItem('klicker-name', nameInput.value));
+
+const cfg = window.KLICKER_CONFIG || {};
+if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
+  $('setup').hidden = false;
+  throw new Error('Supabase nicht konfiguriert');
+}
+const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
 
 const fmtTime = ts => new Date(ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
 const fmtHour = ts => {
@@ -92,8 +107,8 @@ function render(s) {
   state = s;
   clockOffset = s.serverNow - Date.now();
   $('cd-sec').textContent = Math.round(s.cooldownMs / 1000);
-  $('total').textContent = s.total.toLocaleString('de-DE');
-  $('this-hour').textContent = s.thisHour.toLocaleString('de-DE');
+  $('total').textContent = Number(s.total).toLocaleString('de-DE');
+  $('this-hour').textContent = Number(s.thisHour).toLocaleString('de-DE');
 
   const rec = $('records');
   rec.replaceChildren();
@@ -102,7 +117,7 @@ function render(s) {
   }
   for (const r of s.records) {
     const li = document.createElement('li');
-    li.textContent = `${r.count.toLocaleString('de-DE')} Klicks – ${fmtHour(r.hourStart)}`;
+    li.textContent = `${Number(r.count).toLocaleString('de-DE')} Klicks – ${fmtHour(r.hourStart)}`;
     rec.append(li);
   }
 
@@ -124,6 +139,14 @@ function render(s) {
   tick();
 }
 
+async function refresh() {
+  const { data, error } = await sb.rpc('get_state');
+  if (error) { console.error(error); msg.className = 'msg bad'; msg.textContent = 'Datenbank nicht erreichbar.'; return; }
+  render(data);
+}
+let refreshTimer = null;
+const refreshSoon = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 150); };
+
 function remainingMs() {
   if (!state || state.lastAcceptedTs == null) return 0;
   return Math.max(0, state.lastAcceptedTs + state.cooldownMs - (Date.now() + clockOffset));
@@ -140,27 +163,25 @@ setInterval(tick, 100);
 btn.addEventListener('click', async () => {
   sending = true; tick();
   try {
-    const res = await fetch('/api/click', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nameInput.value }),
-    });
-    const r = await res.json();
+    const { data: r, error } = await sb.rpc('click', { p_name: nameInput.value });
+    if (error) throw error;
     if (r.ok) { msg.className = 'msg ok'; msg.textContent = 'Gezählt! +1'; }
     else { msg.className = 'msg bad'; msg.textContent = `Zu spät – jemand war schneller. Noch ${(r.retryInMs / 1000).toFixed(1)} s gesperrt.`; }
-  } catch {
+  } catch (e) {
+    console.error(e);
     msg.className = 'msg bad'; msg.textContent = 'Verbindung fehlgeschlagen.';
   } finally {
-    sending = false; tick();
+    sending = false;
+    await refresh();
   }
 });
 
-// Live-Updates; bei Verbindungsabbruch verbindet EventSource sich selbst neu.
-function connect() {
-  const es = new EventSource('/api/events');
-  es.onmessage = e => render(JSON.parse(e.data));
-}
-fetch('/api/state').then(r => r.json()).then(render).catch(() => {});
-connect();
+// Live: bei jedem neuen Klick (egal von wem) neu laden. Zusätzlich alle 15 s als Absicherung.
+sb.channel('klicks')
+  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clicks' }, refreshSoon)
+  .subscribe();
+setInterval(refresh, 15000);
+refresh();
 </script>
 </body>
 </html>

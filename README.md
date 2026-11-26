@@ -1,41 +1,31 @@
 # Klicker
 
-Ein gemeinsamer Klick-Zähler: Jeder, der die Seite öffnet, kann auf **+1** drücken. Alle sehen denselben Stand live.
+Ein gemeinsamer Klick-Zähler im Browser. Man muss nichts herunterladen: Link öffnen, auf **+1** drücken, und alle sehen den Stand live.
+
+**Link:** https://yarak5113-alt.github.io/klicker/
 
 ## Funktionen
 
-- **Datenbank (SQLite):** Alle Klicks werden in `klicker.db` gespeichert, der Stand bleibt nach einem Neustart erhalten.
-- **Mehrere Nutzer gleichzeitig:** Änderungen erscheinen sofort bei allen (Server-Sent Events).
-- **Globale Sperre:** Nach einem gezählten Klick ist der Knopf **5 Sekunden für alle** gesperrt. Drücken drei Leute innerhalb von 5 Sekunden, zählt nur der erste Klick. Die Prüfung läuft in einer Datenbank-Transaktion (`BEGIN IMMEDIATE`), dadurch kann nie mehr als ein Klick durchkommen.
+- **Online-Datenbank (Supabase):** Die Klicks werden dauerhaft gespeichert und sind für alle gleich.
+- **Live:** Neue Klicks erscheinen sofort bei allen, die die Seite offen haben.
+- **Globale Sperre:** Nach einem gezählten Klick ist der Knopf **5 Sekunden für alle** gesperrt. Drücken drei Leute innerhalb von 5 Sekunden, zählt nur der erste Klick. Die Prüfung läuft in der Datenbank mit einer Sperre (`pg_advisory_xact_lock`), dadurch kann nie mehr als ein Klick durchkommen.
 - **Rekorde pro Stunde:** Die 5 Stunden mit den meisten Klicks plus der Zähler der aktuellen Stunde.
 - **Log:** Unten auf der Seite stehen die letzten 50 Versuche mit Zeit, Name und Status (gezählt / abgelehnt).
 
-## Starten
+## Einrichtung (einmalig, ca. 5 Minuten)
 
-Voraussetzung: [Node.js](https://nodejs.org) **22.13 oder neuer** (nutzt das eingebaute `node:sqlite`, `npm install` ist nicht nötig).
+1. Auf <https://supabase.com> kostenlos anmelden und **New project** erstellen.
+2. Im Projekt links **SQL Editor** öffnen, den Inhalt von [`supabase.sql`](supabase.sql) einfügen und **Run** drücken.
+3. Unter **Project Settings → API** die **Project URL** und den **anon / publishable key** kopieren.
+4. Beide Werte in [`config.js`](config.js) eintragen und auf GitHub speichern (committen).
+5. Nach etwa einer Minute ist die Seite unter dem Link oben fertig.
 
-```bash
-node server.js
-```
+Der anon-Key darf öffentlich sein: Die Datenbank erlaubt nur Lesen und Klicken über die Funktion `click()`. Direktes Ändern oder Löschen ist gesperrt.
 
-Dann <http://localhost:3000> öffnen.
+## Dateien
 
-### Einstellungen (Umgebungsvariablen)
-
-| Variable      | Standard       | Bedeutung                     |
-|---------------|----------------|-------------------------------|
-| `PORT`        | `3000`         | Port des Servers              |
-| `COOLDOWN_MS` | `5000`         | Sperrzeit nach einem Klick    |
-| `DB_FILE`     | `./klicker.db` | Pfad zur SQLite-Datenbank     |
-
-## API
-
-| Methode | Pfad          | Beschreibung                                                     |
-|---------|---------------|------------------------------------------------------------------|
-| GET     | `/api/state`  | Aktueller Stand (Summe, Stunde, Rekorde, Log)                    |
-| POST    | `/api/click`  | Body `{"name":"..."}` → `200` gezählt, `429` gesperrt            |
-| GET     | `/api/events` | Live-Stream (Server-Sent Events) mit dem Stand nach jedem Klick  |
-
-## Online stellen
-
-GitHub speichert nur den Code. Damit andere mitklicken können, muss der Server laufen, z. B. auf Render, Railway, Fly.io oder einem eigenen Server. Die Datenbankdatei muss dort auf einem **dauerhaften Speicher** liegen (`DB_FILE` auf ein Volume setzen), sonst geht der Zählerstand bei einem Neustart verloren.
+| Datei          | Inhalt                                                |
+|----------------|-------------------------------------------------------|
+| `index.html`   | Die Webseite (läuft auf GitHub Pages)                 |
+| `config.js`    | Supabase-URL und Key                                  |
+| `supabase.sql` | Tabelle, Sperre, Rekorde und Rechte für die Datenbank |
